@@ -7,6 +7,7 @@ from struct import iter_unpack, pack
 from typing import BinaryIO
 
 from png._apng import frame_header, scan_animation
+from png._limits import ReadBudget
 from png._pixels import decode_pixels, encode_pixels
 from png._structure import _BEFORE_PALETTE, _BEFORE_DATA
 from png._validation import check_integer
@@ -16,6 +17,7 @@ from png.document import PngDocument
 from png.error import PngParseError, PngValidationError
 from png.format import PngColorType, PngFilterType
 from png.header import PngHeader
+from png.limits import PngReadLimits
 from png.metadata import (
     METADATA_TYPES, PngMetadata, PngBackground, PngHistogram, parse_metadata, validate_metadata_chunks,
 )
@@ -62,9 +64,9 @@ class PngImage:
         self._source_ancillary = None
 
     @staticmethod
-    def from_document(document: PngDocument) -> PngImage:
+    def from_document(document: PngDocument, *, limits: PngReadLimits | None = None) -> PngImage:
         """Decode an independent image, preserving original sample depth."""
-        document.validate()
+        document.validate(limits=limits)
         header = PngHeader.from_chunk(document.chunks[0])
         image = PngImage(header, decode_pixels(header, (chunk.data for chunk in document.find_chunks(b'IDAT'))))
         animation = scan_animation(document.chunks, header)
@@ -79,6 +81,7 @@ class PngImage:
                     image.animation.frames.append(PngFrame(control, bitmap))
         before_data = True
         original = []
+        budget = ReadBudget(limits)
         for chunk in document.chunks:
             if chunk.type == b'PLTE':
                 image.palette = list(iter_unpack('BBB', chunk.data))
@@ -91,7 +94,7 @@ class PngImage:
             elif chunk.type == b'IDAT':
                 before_data = False
             elif chunk.type not in (b'acTL', b'fcTL', b'fdAT') and not chunk.is_critical:
-                typed = parse_metadata(chunk)
+                typed = parse_metadata(chunk, budget=budget)
                 if typed is not None:
                     if isinstance(typed, PngBackground) and typed.color is not None:
                         typed.color = tuple(sample & ((1 << header.bit_depth) - 1) for sample in typed.color)
@@ -118,16 +121,17 @@ class PngImage:
         return image
 
     @staticmethod
-    def parse(stream: bytes | BinaryIO) -> PngImage:
+    def parse(stream: bytes | BinaryIO, *, limits: PngReadLimits | None = None) -> PngImage:
+        ReadBudget(limits)  # Invalid application policy is not corrupt PNG input.
         try:
-            return PngImage.from_document(PngDocument.parse(stream))
+            return PngImage.from_document(PngDocument.parse(stream, limits=limits), limits=limits)
         except PngValidationError as error:
             raise PngParseError(str(error)) from error
 
     @staticmethod
-    def load(file_path: str | PathLike[str]) -> PngImage:
+    def load(file_path: str | PathLike[str], *, limits: PngReadLimits | None = None) -> PngImage:
         with open(file_path, 'rb') as file:
-            return PngImage.parse(file)
+            return PngImage.parse(file, limits=limits)
 
     def to_document(
             self,

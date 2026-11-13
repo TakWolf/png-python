@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import zlib
 
 from png._metadata import PngMetadata, _data, _string, _decode, _keyword, _split_keyword
+from png._limits import ReadBudget
 from png._validation import check_integer
 from png.chunk import PngChunk
 from png.error import PngValidationError
@@ -19,13 +20,15 @@ if TYPE_CHECKING:
     from png.header import PngHeader
 
 
-def _inflate(data: bytes) -> bytes:
+def _inflate(data: bytes, budget: ReadBudget) -> bytes:
     inflater = zlib.decompressobj()
     result = bytearray()
     pending = data
     try:
         while pending and not inflater.eof:
-            result.extend(inflater.decompress(pending, 65536))
+            part = inflater.decompress(pending, budget.metadata_output_size())
+            budget.metadata(len(part))
+            result.extend(part)
             pending = inflater.unconsumed_tail
     except zlib.error as error:
         raise PngValidationError(f'invalid compressed metadata: {error}') from error
@@ -206,10 +209,15 @@ class PngIccProfile(PngMetadata):
 
     @staticmethod
     def from_chunk(chunk: PngChunk) -> PngIccProfile:
+        return PngIccProfile._from_chunk(chunk, ReadBudget(None))
+
+    @staticmethod
+    def _from_chunk(chunk: PngChunk, budget: ReadBudget) -> PngIccProfile:
         name, tail = _split_keyword(_data(chunk, b'iCCP'))
         if not tail or tail[0] != 0:
             raise PngValidationError('iCCP requires compression method 0')
-        result = PngIccProfile(name, _inflate(tail[1:]))
+        budget.metadata(chunk.length - len(tail[1:]))
+        result = PngIccProfile(name, _inflate(tail[1:], budget))
         result.validate()
         return result
 
@@ -243,10 +251,15 @@ class PngCompressedText(PngText):
 
     @staticmethod
     def from_chunk(chunk: PngChunk) -> PngCompressedText:
+        return PngCompressedText._from_chunk(chunk, ReadBudget(None))
+
+    @staticmethod
+    def _from_chunk(chunk: PngChunk, budget: ReadBudget) -> PngCompressedText:
         keyword, tail = _split_keyword(_data(chunk, b'zTXt'))
         if not tail or tail[0] != 0:
             raise PngValidationError('zTXt requires compression method 0')
-        return PngCompressedText(keyword, _decode(_inflate(tail[1:]), 'latin-1'))
+        budget.metadata(chunk.length - len(tail[1:]))
+        return PngCompressedText(keyword, _decode(_inflate(tail[1:], budget), 'latin-1'))
 
     def to_chunk(self) -> PngChunk:
         return PngChunk(self.type, _keyword(self.keyword) + b'\0\0' + zlib.compress(_string(self.text, 'latin-1')))
@@ -270,6 +283,10 @@ class PngInternationalText(PngMetadata):
 
     @staticmethod
     def from_chunk(chunk: PngChunk) -> PngInternationalText:
+        return PngInternationalText._from_chunk(chunk, ReadBudget(None))
+
+    @staticmethod
+    def _from_chunk(chunk: PngChunk, budget: ReadBudget) -> PngInternationalText:
         keyword, tail = _split_keyword(_data(chunk, b'iTXt'))
         if len(tail) < 2 or tail[0] not in (0, 1) or (tail[0] == 1 and tail[1] != 0):
             raise PngValidationError('invalid iTXt compression flag or method')
@@ -278,7 +295,8 @@ class PngInternationalText(PngMetadata):
         if len(parts) != 3:
             raise PngValidationError('iTXt is missing language or translated-keyword separators')
         language, translated, text = parts
-        result = PngInternationalText(keyword, _decode(_inflate(text) if compressed else text, 'utf-8'),
+        budget.metadata(chunk.length - len(text) if compressed else chunk.length)
+        result = PngInternationalText(keyword, _decode(_inflate(text, budget) if compressed else text, 'utf-8'),
                                       _decode(language, 'ascii'), _decode(translated, 'utf-8'), compressed)
         result.validate()
         return result
@@ -532,20 +550,28 @@ METADATA_TYPES = frozenset(_METADATA_CLASSES)
 COLOR_METADATA_TYPES = frozenset((b'gAMA', b'cHRM', b'sRGB', b'cICP', b'mDCV', b'cLLI', b'iCCP'))
 
 
-def parse_metadata(chunk: PngChunk) -> PngMetadata | None:
+def parse_metadata(chunk: PngChunk, *, budget: ReadBudget | None = None) -> PngMetadata | None:
+    if budget is None:
+        budget = ReadBudget(None)
     cls = _METADATA_CLASSES.get(chunk.type)
+    if cls in (PngIccProfile, PngCompressedText, PngInternationalText):
+        return cls._from_chunk(chunk, budget)
+    if chunk.type not in (b'IHDR', b'PLTE', b'IDAT', b'IEND', b'tRNS', b'acTL', b'fcTL', b'fdAT'):
+        budget.metadata(chunk.length)
     return cls.from_chunk(chunk) if cls is not None else None
 
 
 def validate_metadata_chunks(
         chunks: list[PngChunk], header: PngHeader | None = None, palette_size: int = 0,
-        *, for_encoding: bool = False,
+        *, for_encoding: bool = False, budget: ReadBudget | None = None,
 ) -> None:
+    if budget is None:
+        budget = ReadBudget(None)
     parsed: dict[bytes, PngMetadata] = {}
     repeated = {b'tEXt', b'zTXt', b'iTXt', b'sPLT', b'gIFg', b'gIFx'}
     palette_names = set()
     for chunk in chunks:
-        metadata = parse_metadata(chunk)
+        metadata = parse_metadata(chunk, budget=budget)
         if metadata is not None:
             if chunk.type in parsed and chunk.type not in repeated:
                 raise PngValidationError(f'duplicate {chunk.type!r} metadata')

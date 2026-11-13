@@ -6,7 +6,9 @@ from typing import BinaryIO
 from zlib import crc32
 
 from png._stream import read_exact, write_all
+from png._limits import ReadBudget
 from png.error import PngCrcError, PngParseError, PngValidationError
+from png.limits import PngReadLimits
 
 
 class PngChunk:
@@ -25,10 +27,16 @@ class PngChunk:
         self.data = data
 
     @staticmethod
-    def parse(stream: bytes | BinaryIO) -> PngChunk:
+    def parse(stream: bytes | BinaryIO, *, limits: PngReadLimits | None = None) -> PngChunk:
         """Read one chunk envelope, checking its name, length and CRC."""
+        budget = ReadBudget(limits)
         if isinstance(stream, bytes):
             stream = BytesIO(stream)
+        return PngChunk._parse(stream, budget)
+
+    @staticmethod
+    def _parse(stream: BinaryIO, budget: ReadBudget) -> PngChunk:
+        budget.start_chunk()
         length, chunk_type = unpack('>I4s', read_exact(stream, 8))
         if length > 0x7FFFFFFF:
             raise PngParseError(f'chunk {chunk_type!r} exceeds the PNG length limit')
@@ -37,6 +45,7 @@ class PngChunk:
             chunk.validate()
         except PngValidationError as error:
             raise PngParseError(str(error)) from error
+        budget.chunk(length)
         chunk.data = read_exact(stream, length)
         expected, = unpack('>I', read_exact(stream, 4))
         actual = chunk.crc

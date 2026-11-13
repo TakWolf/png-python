@@ -5,10 +5,12 @@ from os import PathLike
 from typing import BinaryIO
 
 from png._stream import read_exact, write_all
+from png._limits import ReadBudget
 from png._structure import UNDERSTOOD_TYPES, validate_structure
 from png.chunk import PngChunk
 from png.error import PngParseError, PngValidationError
 from png.header import PngHeader
+from png.limits import PngReadLimits
 
 _SIGNATURE = b'\x89PNG\r\n\x1a\n'
 
@@ -28,51 +30,54 @@ class PngDocument:
         self._original_chunks = None
 
     @staticmethod
-    def parse(stream: bytes | BinaryIO) -> PngDocument:
+    def parse(stream: bytes | BinaryIO, *, limits: PngReadLimits | None = None) -> PngDocument:
         """Read one PNG datastream, stopping immediately after IEND.
 
         Checks the envelope and implemented structure rules, not compressed
         pixels or the complete semantics of metadata and animation chunks.
         A supplied stream is neither closed nor rewound.
         """
+        budget = ReadBudget(limits)
+        budget.signature()
         if isinstance(stream, bytes):
             stream = BytesIO(stream)
         if read_exact(stream, 8) != _SIGNATURE:
             raise PngParseError('not a valid PNG signature')
         document = PngDocument()
         while True:
-            chunk = PngChunk.parse(stream)
+            chunk = PngChunk._parse(stream, budget)
             if not document.chunks:
                 try:
                     PngHeader.from_chunk(chunk)
                 except PngValidationError as error:
                     raise PngParseError(str(error)) from error
+            budget.inspect(chunk.type, chunk.data)
             document.chunks.append(chunk)
             if chunk.type == b'IEND':
                 break
         try:
-            document.validate()
+            document.validate(limits=limits)
         except PngValidationError as error:
             raise PngParseError(str(error)) from error
         document._original_chunks = tuple((chunk, chunk.type, chunk.data) for chunk in document.chunks)
         return document
 
     @staticmethod
-    def load(file_path: str | PathLike[str]) -> PngDocument:
+    def load(file_path: str | PathLike[str], *, limits: PngReadLimits | None = None) -> PngDocument:
         with open(file_path, 'rb') as file:
-            return PngDocument.parse(file)
+            return PngDocument.parse(file, limits=limits)
 
     def find_chunks(self, chunk_type: bytes) -> list[PngChunk]:
         """Return references to matching chunks, in document order."""
         return [chunk for chunk in self.chunks if chunk.type == chunk_type]
 
-    def validate(self) -> None:
+    def validate(self, *, limits: PngReadLimits | None = None) -> None:
         """Check envelope fields, core chunk payloads and standard ordering.
 
         CRCs are checked while parsing and recomputed while writing. This does
         not decompress IDAT or validate all metadata/APNG payload semantics.
         """
-        validate_structure(self.chunks)
+        validate_structure(self.chunks, limits=limits)
 
     def _output_chunks(self) -> list[PngChunk]:
         chunks = self.chunks

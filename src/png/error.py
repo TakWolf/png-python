@@ -14,6 +14,20 @@ class PngUnsupportedError(PngError):
     """The requested feature has not been implemented yet."""
 
 
+class PngLimitError(PngParseError):
+    """An application read policy was exceeded; the PNG may still be valid."""
+
+    limit: str
+    maximum: int
+    actual: int
+
+    def __init__(self, limit: str, maximum: int, actual: int) -> None:
+        self.limit = limit
+        self.maximum = maximum
+        self.actual = actual
+        super().__init__(f'{limit} exceeded: maximum {maximum}, observed {actual}')
+
+
 class PngCrcError(PngParseError):
     chunk_type: bytes
     expected: int

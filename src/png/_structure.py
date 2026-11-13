@@ -4,10 +4,12 @@ This module does not decompress image data or interpret all metadata payloads.
 """
 
 from png.chunk import PngChunk
+from png._limits import ReadBudget
 from png._apng import scan_animation
 from png.error import PngValidationError
 from png.format import PngColorType
 from png.header import PngHeader
+from png.limits import PngReadLimits
 from png.metadata import METADATA_TYPES, validate_metadata_chunks
 
 CRITICAL_TYPES = frozenset((b'IHDR', b'PLTE', b'IDAT', b'IEND'))
@@ -26,7 +28,9 @@ _FIXED_LENGTHS = {
 }
 
 
-def validate_structure(chunks: list[PngChunk]) -> None:
+def validate_structure(chunks: list[PngChunk], *, limits: PngReadLimits | None = None) -> None:
+    budget = ReadBudget(limits)
+    budget.signature()
     if not chunks or chunks[0].type != b'IHDR':
         raise PngValidationError('IHDR must be the first chunk')
     if chunks[-1].type != b'IEND':
@@ -35,6 +39,8 @@ def validate_structure(chunks: list[PngChunk]) -> None:
     positions: dict[bytes, list[int]] = {}
     for index, chunk in enumerate(chunks):
         chunk.validate()
+        budget.chunk(chunk.length)
+        budget.inspect(chunk.type, chunk.data)
         kind = chunk.type
         if chunk.is_critical and kind not in CRITICAL_TYPES:
             raise PngValidationError(f'unknown critical chunk: {kind!r}')
@@ -86,4 +92,4 @@ def validate_structure(chunks: list[PngChunk]) -> None:
         else:
             raise PngValidationError('tRNS is forbidden for images with an alpha channel')
     scan_animation(chunks, header)
-    validate_metadata_chunks(chunks, header, palette_size)
+    validate_metadata_chunks(chunks, header, palette_size, budget=budget)
