@@ -2,63 +2,21 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from fractions import Fraction
 import re
 from struct import iter_unpack, pack, unpack
-from typing import ClassVar, TYPE_CHECKING
+from typing import TYPE_CHECKING
 import zlib
 
+from png._metadata import PngMetadata, _data, _string, _decode, _keyword, _split_keyword
 from png._validation import check_integer
 from png.chunk import PngChunk
 from png.error import PngValidationError
+from png.extensions import EXTENSION_CLASSES
 from png.format import PngColorType, PngPhysicalUnit, PngRenderingIntent
 
 if TYPE_CHECKING:
     from png.header import PngHeader
-
-
-def _data(chunk: PngChunk, kind: bytes, size: int | None = None) -> bytes:
-    chunk.validate()
-    if chunk.type != kind or (size is not None and chunk.length != size):
-        raise PngValidationError(f'invalid {kind!r} metadata chunk')
-    return chunk.data
-
-
-def _string(value: str, encoding: str) -> bytes:
-    if not isinstance(value, str) or '\0' in value:
-        raise PngValidationError('metadata strings must be str without null characters')
-    try:
-        return value.encode(encoding)
-    except UnicodeError as error:
-        raise PngValidationError(f'metadata string is not valid {encoding}') from error
-
-
-def _decode(data: bytes, encoding: str) -> str:
-    try:
-        value = data.decode(encoding)
-    except UnicodeError as error:
-        raise PngValidationError(f'metadata string is not valid {encoding}') from error
-    if '\0' in value:
-        raise PngValidationError('metadata text must not contain null characters')
-    return value
-
-
-def _keyword(value: str) -> bytes:
-    encoded = _string(value, 'latin-1')
-    if (not 1 <= len(encoded) <= 79 or value.startswith(' ') or value.endswith(' ') or '  ' in value or
-            any(not (32 <= item <= 126 or 161 <= item <= 255) for item in encoded)):
-        raise PngValidationError('keyword must be 1-79 printable Latin-1 bytes without leading, trailing or repeated spaces')
-    return encoded
-
-
-def _split_keyword(data: bytes) -> tuple[str, bytes]:
-    keyword, separator, tail = data.partition(b'\0')
-    if not separator:
-        raise PngValidationError('missing metadata keyword separator')
-    value = keyword.decode('latin-1')
-    _keyword(value)
-    return value, tail
 
 
 def _inflate(data: bytes) -> bytes:
@@ -74,22 +32,6 @@ def _inflate(data: bytes) -> bytes:
     if not inflater.eof or inflater.unused_data:
         raise PngValidationError('compressed metadata must contain one complete zlib stream')
     return bytes(result)
-
-
-class PngMetadata(ABC):
-    type: ClassVar[bytes]
-
-    @staticmethod
-    @abstractmethod
-    def from_chunk(chunk: PngChunk) -> PngMetadata:
-        raise NotImplementedError
-
-    @abstractmethod
-    def to_chunk(self) -> PngChunk:
-        raise NotImplementedError
-
-    def validate(self) -> None:
-        self.to_chunk()
 
 
 class PngGamma(PngMetadata):
@@ -583,7 +525,7 @@ _METADATA_CLASSES = {
         PngGamma, PngChromaticities, PngSrgb, PngCicp, PngMasteringDisplayColorVolume,
         PngContentLightLevel, PngIccProfile, PngText, PngCompressedText, PngInternationalText,
         PngPhysicalDimensions, PngTime, PngExif, PngBackground, PngHistogram,
-        PngSignificantBits, PngSuggestedPalette,
+        PngSignificantBits, PngSuggestedPalette, *EXTENSION_CLASSES,
     )
 }
 METADATA_TYPES = frozenset(_METADATA_CLASSES)
@@ -600,7 +542,7 @@ def validate_metadata_chunks(
         *, for_encoding: bool = False,
 ) -> None:
     parsed: dict[bytes, PngMetadata] = {}
-    repeated = {b'tEXt', b'zTXt', b'iTXt', b'sPLT'}
+    repeated = {b'tEXt', b'zTXt', b'iTXt', b'sPLT', b'gIFg', b'gIFx'}
     palette_names = set()
     for chunk in chunks:
         metadata = parse_metadata(chunk)
@@ -623,6 +565,8 @@ def validate_metadata_chunks(
                 raise PngValidationError('sRGB requires standard sRGB chromaticities when cHRM is present')
     if header is None:
         return
+    if b'sTER' in parsed:
+        parsed[b'sTER'].layout(header.width)
     if b'bKGD' in parsed:
         background = parsed[b'bKGD']
         if header.color_type == PngColorType.INDEXED_COLOR:

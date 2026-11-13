@@ -2,6 +2,9 @@ from png.animation import PngAnimation, PngFrame, PngFrameControl, PngRenderedFr
 from png.chunk import PngChunk
 from png.document import PngDocument
 from png.error import PngCrcError, PngError, PngParseError, PngUnsupportedError, PngValidationError
+from png.extensions import (
+    PngOffset, PngCalibration, PngPhysicalScale, PngGifGraphicControl, PngGifApplication, PngStereo,
+)
 from png.format import (
     PngBlendOp,
     PngColorType,
@@ -12,6 +15,10 @@ from png.format import (
     PngInterlaceMethod,
     PngRenderingIntent,
     PngPhysicalUnit,
+    PngOffsetUnit,
+    PngCalibrationEquation,
+    PngScaleUnit,
+    PngStereoMode,
 )
 from png.header import PngHeader
 from png.image import PngImage

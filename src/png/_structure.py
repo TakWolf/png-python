@@ -16,7 +16,9 @@ UNDERSTOOD_TYPES = CRITICAL_TYPES | {b'tRNS', b'acTL', b'fcTL', b'fdAT'} | METAD
 
 _BEFORE_PALETTE = frozenset((b'cHRM', b'cICP', b'gAMA', b'iCCP', b'mDCV', b'cLLI', b'sBIT', b'sRGB'))
 _AFTER_PALETTE = frozenset((b'bKGD', b'hIST', b'tRNS'))
-_BEFORE_DATA = _BEFORE_PALETTE | _AFTER_PALETTE | {b'PLTE', b'acTL', b'eXIf', b'pHYs', b'sPLT'}
+_BEFORE_DATA = _BEFORE_PALETTE | _AFTER_PALETTE | {
+    b'PLTE', b'acTL', b'eXIf', b'pHYs', b'sPLT', b'oFFs', b'pCAL', b'sCAL', b'sTER',
+}
 _SINGLETONS = _BEFORE_DATA - {b'sPLT'} | {b'IHDR', b'IEND', b'tIME'}
 _FIXED_LENGTHS = {
     b'IEND': 0, b'cHRM': 32, b'gAMA': 4, b'cICP': 4, b'mDCV': 24,

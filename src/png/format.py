@@ -75,3 +75,29 @@ class PngRenderingIntent(IntEnum):
 class PngPhysicalUnit(IntEnum):
     UNKNOWN = 0
     METRE = 1
+
+
+@unique
+class PngOffsetUnit(IntEnum):
+    PIXEL = 0
+    MICROMETRE = 1
+
+
+@unique
+class PngCalibrationEquation(IntEnum):
+    LINEAR = 0
+    BASE_E_EXPONENTIAL = 1
+    ARBITRARY_BASE_EXPONENTIAL = 2
+    HYPERBOLIC = 3
+
+
+@unique
+class PngScaleUnit(IntEnum):
+    METRE = 1
+    RADIAN = 2
+
+
+@unique
+class PngStereoMode(IntEnum):
+    CROSS_FUSE = 0
+    DIVERGING_FUSE = 1
