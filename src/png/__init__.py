@@ -1,7 +1,7 @@
 from png.animation import PngAnimation, PngFrame, PngFrameControl
 from png.chunk import PngChunk
 from png.document import PngDocument
-from png.error import PngCrcError, PngError, PngParseError, PngValidationError
+from png.error import PngCrcError, PngError, PngParseError, PngUnsupportedError, PngValidationError
 from png.format import (
     PngBlendOp,
     PngColorType,

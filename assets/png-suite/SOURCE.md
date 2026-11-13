@@ -19,5 +19,8 @@ assuming every `.png` file is valid.
 
 Model tests read IHDR fields from the basic `basn` / `basi` images. File-layer
 tests round-trip all 162 valid files without changing their raw chunks and
-reject the 14 deliberately invalid files. Pixel decoding and complete metadata
-semantics are not tested at this stage; this is not full conformance coverage.
+reject the 14 deliberately invalid files. Pixel tests decode and re-encode
+all valid files, compare basic Adam7/non-interlaced pairs and common regions
+of filter fixtures, and cover encoder settings and malformed pixel streams.
+Complete metadata and APNG semantics are not covered at this stage; this is
+not full conformance coverage.

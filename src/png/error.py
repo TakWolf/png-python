@@ -10,6 +10,10 @@ class PngParseError(PngError):
     """The input datastream is corrupt or has an unsupported structure."""
 
 
+class PngUnsupportedError(PngError):
+    """The requested feature has not been implemented yet."""
+
+
 class PngCrcError(PngParseError):
     chunk_type: bytes
     expected: int
