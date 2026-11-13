@@ -185,14 +185,16 @@ def test_actual_animation_frames_cannot_bypass_declared_limit(png_suite_dir: Pat
 @pytest.mark.parametrize(('item', 'decoded_size'), [
     (PngText('K', 'abc'), 5),
     (PngCompressedText('K', 'abc'), 6),
-    (PngIccProfile('K', b'abcd'), 7),
+    ('icc_profile', 2991),
     (PngInternationalText('K', '中文', 'zh', '说明', compressed=False), 20),
     (PngInternationalText('K', '中文', 'zh', '说明', compressed=True), 20),
     (PngChunk(b'vpAg', b'unknown'), 7),
 ])
 def test_metadata_size_includes_headers_and_expanded_encoded_bytes(
-        png_suite_dir: Path, item, decoded_size: int,
+        png_suite_dir: Path, icc_profile_bytes: bytes, item, decoded_size: int,
 ) -> None:
+    if item == 'icc_profile':
+        item = PngIccProfile('K', icc_profile_bytes)
     chunk = item if isinstance(item, PngChunk) else item.to_chunk()
     document = _with_metadata(png_suite_dir, [chunk])
     data = document.dump_to_bytes()

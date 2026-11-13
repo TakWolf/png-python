@@ -130,8 +130,12 @@ class PngImage:
 
     @staticmethod
     def load(file_path: str | PathLike[str], *, limits: PngReadLimits | None = None) -> PngImage:
-        with open(file_path, 'rb') as file:
-            return PngImage.parse(file, limits=limits)
+        """Read a whole PNG file, checking its boundary before decoding pixels."""
+        document = PngDocument.load(file_path, limits=limits)
+        try:
+            return PngImage.from_document(document, limits=limits)
+        except PngValidationError as error:
+            raise PngParseError(str(error)) from error
 
     def to_document(
             self,

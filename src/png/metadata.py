@@ -207,6 +207,24 @@ class PngIccProfile(PngMetadata):
         self.name = name
         self.profile = profile
 
+    def _validate_header(self) -> None:
+        if not isinstance(self.profile, bytes) or len(self.profile) < 128:
+            raise PngValidationError('ICC profile requires a complete 128-byte header')
+        if self.profile[36:40] != b'acsp':
+            raise PngValidationError('ICC profile requires the acsp header signature')
+
+    @property
+    def color_space(self) -> bytes:
+        """ICC data color-space signature, derived from the current profile."""
+        self._validate_header()
+        return self.profile[16:20]
+
+    @property
+    def declared_size(self) -> int:
+        """ICC header size declaration; not a guarantee of internal validity."""
+        self._validate_header()
+        return unpack('>I', self.profile[:4])[0]
+
     @staticmethod
     def from_chunk(chunk: PngChunk) -> PngIccProfile:
         return PngIccProfile._from_chunk(chunk, ReadBudget(None))
@@ -223,8 +241,8 @@ class PngIccProfile(PngMetadata):
 
     def to_chunk(self) -> PngChunk:
         name = _keyword(self.name)
-        if not isinstance(self.profile, bytes) or not self.profile:
-            raise PngValidationError('ICC profile must be nonempty bytes')
+        if self.color_space not in (b'RGB ', b'GRAY'):
+            raise PngValidationError('PNG ICC profiles must describe RGB or grayscale data')
         return PngChunk(self.type, name + b'\0\0' + zlib.compress(self.profile))
 
 
@@ -591,6 +609,10 @@ def validate_metadata_chunks(
                 raise PngValidationError('sRGB requires standard sRGB chromaticities when cHRM is present')
     if header is None:
         return
+    if b'iCCP' in parsed:
+        expected = b'GRAY' if header.color_type in (PngColorType.GRAYSCALE, PngColorType.GRAYSCALE_ALPHA) else b'RGB '
+        if parsed[b'iCCP'].color_space != expected:
+            raise PngValidationError('iCCP color space must match the PNG color type')
     if b'sTER' in parsed:
         parsed[b'sTER'].layout(header.width)
     if b'bKGD' in parsed:

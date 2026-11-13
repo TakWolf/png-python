@@ -64,8 +64,12 @@ class PngDocument:
 
     @staticmethod
     def load(file_path: str | PathLike[str], *, limits: PngReadLimits | None = None) -> PngDocument:
+        """Read an entire PNG file; reject any content following IEND."""
         with open(file_path, 'rb') as file:
-            return PngDocument.parse(file, limits=limits)
+            document = PngDocument.parse(file, limits=limits)
+            if file.read(1):
+                raise PngParseError('unexpected data after IEND')
+            return document
 
     def find_chunks(self, chunk_type: bytes) -> list[PngChunk]:
         """Return references to matching chunks, in document order."""
