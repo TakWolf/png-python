@@ -236,8 +236,8 @@ class PngIccProfile(PngMetadata):
         """Check structure, header fields/ID and selected v2/v4 tag contents.
 
         Includes v2/v4 class-specific required tags and the four table-based LUT
-        layouts and known multi-process element encodings. Does not evaluate
-        colorimetric transforms. Readers keep the original bytes for inspection.
+        layouts, known multi-process elements, named-color and sequence records.
+        Does not evaluate colorimetric transforms. Readers retain original bytes.
         """
         self._validate_header()
         validate_icc_tags(self.profile)

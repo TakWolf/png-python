@@ -5,6 +5,8 @@ from struct import unpack_from
 from png._icc_header import validate_header_fields
 from png._icc_lut import LUT_TYPES, curve_end, validate_lut, validate_lut_context
 from png._icc_mpet import MPET_TAGS, validate_mpet, validate_mpet_context
+from png._icc_records import validate_named_colors, validate_profile_sequence
+from png._icc_text import ascii_terminated, description_end, multilingual_end
 from png.error import PngUnsupportedError, PngValidationError
 
 
@@ -154,6 +156,10 @@ def _validate_icc_tag_data(data: bytes) -> None:
         validate_lut(data)
     elif kind == b'mpet':
         validate_mpet(data)
+    elif kind == b'ncl2':
+        validate_named_colors(data)
+    elif kind == b'pseq':
+        validate_profile_sequence(data)
     elif kind == b'XYZ ':
         if size < 20 or (size - 8) % 12:
             raise PngValidationError('ICC XYZ array has an invalid size')
@@ -161,47 +167,12 @@ def _validate_icc_tag_data(data: bytes) -> None:
         if (size - 8) % 4:
             raise PngValidationError('ICC fixed-point array has an invalid size')
     elif kind == b'text':
-        _validate_icc_ascii(data[8:])
+        ascii_terminated(memoryview(data)[8:])
     elif kind == b'desc':
-        if size < 12:
-            raise PngValidationError('ICC description lacks its ASCII count')
-        ascii_end = 12 + unpack_from('>I', data, 8)[0]
-        if ascii_end + 8 > size:
-            raise PngValidationError('ICC description ASCII data exceeds the tag')
-        _validate_icc_ascii(data[12:ascii_end])
-        unicode_count, = unpack_from('>I', data, ascii_end + 4)
-        unicode_end = ascii_end + 8 + 2 * unicode_count
-        if unicode_end + 70 != size:
+        if description_end(memoryview(data)) != size:
             raise PngValidationError('ICC description Unicode or ScriptCode extent is invalid')
-        if unicode_count and data[unicode_end - 2:unicode_end] != bytes(2):
-            raise PngValidationError('ICC description Unicode string requires a terminator')
-        script_count = data[unicode_end + 2]
-        if script_count > 67 or (script_count and data[unicode_end + 2 + script_count] != 0):
-            raise PngValidationError('ICC description ScriptCode string is invalid')
     elif kind == b'mluc':
-        if size < 16:
-            raise PngValidationError('ICC multilingual tag lacks its record header')
-        count, stride = unpack_from('>II', data, 8)
-        table_end = 16 + count * stride
-        if stride < 12 or table_end > size:
-            raise PngValidationError('ICC multilingual record table is invalid')
-        checked = set()
-        for index in range(count):
-            length, offset = unpack_from('>II', data, 20 + index * stride)
-            if length % 2 or offset < table_end or offset + length > size:
-                raise PngValidationError('ICC multilingual string exceeds the tag or has an odd length')
-            extent = (offset, length)
-            if extent not in checked:
-                try:
-                    data[offset:offset + length].decode('utf-16-be')
-                except UnicodeDecodeError as error:
-                    raise PngValidationError('ICC multilingual string is not UTF-16BE') from error
-                checked.add(extent)
-
-
-def _validate_icc_ascii(data: bytes) -> None:
-    if not data or data[-1] != 0 or any(value > 127 for value in data):
-        raise PngValidationError('ICC text requires null-terminated 7-bit ASCII')
+        multilingual_end(memoryview(data))
 
 
 _TIFF_TYPE_SIZES = {1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8}
