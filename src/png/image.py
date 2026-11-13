@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 from io import BytesIO
+from collections.abc import Iterator
 from os import PathLike
 from struct import iter_unpack, pack
 from typing import BinaryIO
 
+from png._apng import frame_header, scan_animation
 from png._pixels import decode_pixels, encode_pixels
 from png._structure import _BEFORE_PALETTE
 from png._validation import check_integer
-from png.animation import PngAnimation
+from png.animation import PngAnimation, PngFrame, PngRenderedFrame
 from png.chunk import PngChunk
 from png.document import PngDocument
-from png.error import PngUnsupportedError, PngValidationError
+from png.error import PngParseError, PngValidationError
 from png.format import PngColorType, PngFilterType
 from png.header import PngHeader
 
@@ -55,12 +57,20 @@ class PngImage:
 
     @staticmethod
     def from_document(document: PngDocument) -> PngImage:
-        """Decode an independent static image, preserving original sample depth."""
+        """Decode an independent image, preserving original sample depth."""
         document.validate()
-        if any(chunk.type in (b'acTL', b'fcTL', b'fdAT') for chunk in document.chunks):
-            raise PngUnsupportedError('APNG pixel decoding is not implemented yet; use PngDocument for raw chunks')
         header = PngHeader.from_chunk(document.chunks[0])
         image = PngImage(header, decode_pixels(header, (chunk.data for chunk in document.find_chunks(b'IDAT'))))
+        animation = scan_animation(document.chunks, header)
+        if animation is not None:
+            plays, frames = animation
+            image.animation = PngAnimation(num_plays=plays)
+            for control, blocks, is_default in frames:
+                if is_default:
+                    image.animation.default_image_control = control
+                else:
+                    bitmap = decode_pixels(frame_header(header, control.dimensions), (chunk.data[4:] for chunk in blocks))
+                    image.animation.frames.append(PngFrame(control, bitmap))
         before_data = True
         original = []
         for chunk in document.chunks:
@@ -74,13 +84,14 @@ class PngImage:
                     image.transparent_color = tuple(sample & mask for sample, in iter_unpack('>H', chunk.data))
             elif chunk.type == b'IDAT':
                 before_data = False
-            elif not chunk.is_critical:
+            elif chunk.type not in (b'acTL', b'fcTL', b'fdAT') and not chunk.is_critical:
                 copied = PngChunk(chunk.type, chunk.data)
                 image.ancillary_chunks.append(copied)
                 original.append((copied, copied.type, copied.data, not before_data))
         image._source_ancillary = tuple(original)
         if header.color_type == PngColorType.INDEXED_COLOR:
-            largest_index = max(max(row) for row in image.bitmap)
+            bitmaps = [image.bitmap] + ([frame.bitmap for frame in image.animation.frames] if image.animation else [])
+            largest_index = max(max(row) for bitmap in bitmaps for row in bitmap)
             if largest_index >= len(image.palette):
                 # Third Edition 13.1: out-of-range palette indices display as
                 # opaque black. Extend the palette so the sample model remains
@@ -93,7 +104,10 @@ class PngImage:
 
     @staticmethod
     def parse(stream: bytes | BinaryIO) -> PngImage:
-        return PngImage.from_document(PngDocument.parse(stream))
+        try:
+            return PngImage.from_document(PngDocument.parse(stream))
+        except PngValidationError as error:
+            raise PngParseError(str(error)) from error
 
     @staticmethod
     def load(file_path: str | PathLike[str]) -> PngImage:
@@ -107,9 +121,7 @@ class PngImage:
             compression_level: int = 6,
             idat_chunk_size: int = 65536,
     ) -> PngDocument:
-        """Encode a static image. None selects adaptive scanline filtering."""
-        if self.animation is not None:
-            raise PngUnsupportedError('APNG pixel encoding is not implemented yet')
+        """Encode an image. None selects adaptive scanline filtering."""
         self.validate()
         check_integer('IDAT chunk size', idat_chunk_size, 1, 0x7FFFFFFF)
         encoded = encode_pixels(self.header, self.bitmap, filter_type, compression_level)
@@ -137,13 +149,40 @@ class PngImage:
             chunks.append(PngChunk(b'tRNS', pack(f'>{len(self.transparent_color)}H', *self.transparent_color)))
         elif self.palette_alpha:
             chunks.append(PngChunk(b'tRNS', bytes(self.palette_alpha)))
+        sequence = 0
+        if self.animation is not None:
+            chunks.append(PngChunk(b'acTL', pack('>II', self.animation.num_frames, self.animation.num_plays)))
+            if self.animation.default_image_control is not None:
+                chunks.append(self.animation.default_image_control.to_chunk(sequence))
+                sequence += 1
         chunks.extend(PngChunk(b'IDAT', encoded[offset:offset + idat_chunk_size])
                       for offset in range(0, len(encoded), idat_chunk_size))
+        if self.animation is not None:
+            for frame in self.animation.frames:
+                chunks.append(frame.control.to_chunk(sequence))
+                sequence += 1
+                payload = encode_pixels(frame_header(self.header, frame.control.dimensions), frame.bitmap,
+                                        filter_type, compression_level)
+                frame_chunk_size = min(idat_chunk_size, 0x7FFFFFFF - 4)
+                for offset in range(0, len(payload), frame_chunk_size):
+                    check_integer('sequence number', sequence, 0, 0x7FFFFFFF)
+                    chunks.append(PngChunk(b'fdAT', pack('>I', sequence) + payload[offset:offset + frame_chunk_size]))
+                    sequence += 1
         chunks.extend(after)
         chunks.append(PngChunk(b'IEND'))
         document = PngDocument(chunks)
         document.validate()
         return document
+
+    def render_frames(self) -> Iterator[PngRenderedFrame]:
+        """Yield independent RGBA canvas snapshots for one animation play.
+
+        Samples are composited in their stored color space. Color management,
+        display transfer functions and HDR tone mapping are separate operations.
+        """
+        from png._composite import render_frames
+        self.validate()
+        yield from render_frames(self)
 
     def dump(
             self,

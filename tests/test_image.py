@@ -8,7 +8,7 @@ import pytest
 
 from png import (
     PngAnimation, PngChunk, PngColorType, PngDocument, PngFilterType, PngHeader,
-    PngImage, PngInterlaceMethod, PngParseError, PngUnsupportedError, PngValidationError,
+    PngImage, PngInterlaceMethod, PngParseError, PngValidationError,
 )
 
 _SUITE_DIR = Path(__file__).parents[1].joinpath('assets', 'png-suite')
@@ -238,13 +238,13 @@ def test_new_image_metadata_is_explicit() -> None:
     assert kinds.index(b'gAMA') < kinds.index(b'PLTE') < kinds.index(b'bKGD') < kinds.index(b'IDAT')
 
 
-def test_apng_remains_explicitly_unsupported(png_suite_dir: Path) -> None:
+def test_incomplete_apng_is_rejected(png_suite_dir: Path) -> None:
     document = PngDocument.load(png_suite_dir.joinpath('basn2c08.png'))
     document.chunks.insert(1, PngChunk(b'acTL', pack('>II', 1, 0)))
-    with pytest.raises(PngUnsupportedError, match='APNG'):
+    with pytest.raises(PngValidationError, match='frames'):
         PngImage.from_document(document)
     image = PngImage(PngHeader((1, 1)), [[0] * 4], animation=PngAnimation())
-    with pytest.raises(PngUnsupportedError, match='APNG'):
+    with pytest.raises(PngValidationError, match='frames'):
         image.to_document()
 
 

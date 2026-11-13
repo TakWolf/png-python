@@ -4,13 +4,14 @@ This module does not decompress image data or interpret all metadata payloads.
 """
 
 from png.chunk import PngChunk
+from png._apng import scan_animation
 from png.error import PngValidationError
 from png.format import PngColorType
 from png.header import PngHeader
 
 CRITICAL_TYPES = frozenset((b'IHDR', b'PLTE', b'IDAT', b'IEND'))
 # Only these chunks have semantic handling for critical edits at this stage.
-UNDERSTOOD_TYPES = CRITICAL_TYPES | {b'tRNS'}
+UNDERSTOOD_TYPES = CRITICAL_TYPES | {b'tRNS', b'acTL', b'fcTL', b'fdAT'}
 
 _BEFORE_PALETTE = frozenset((b'cHRM', b'cICP', b'gAMA', b'iCCP', b'mDCV', b'cLLI', b'sBIT', b'sRGB'))
 _AFTER_PALETTE = frozenset((b'bKGD', b'hIST', b'tRNS'))
@@ -97,3 +98,4 @@ def validate_structure(chunks: list[PngChunk]) -> None:
         maximum = 8 if header.color_type == PngColorType.INDEXED_COLOR else header.bit_depth
         if significant.length != channels or any(not 1 <= value <= maximum for value in significant.data):
             raise PngValidationError('sBIT sample depths must fit the color type and bit depth')
+    scan_animation(chunks, header)

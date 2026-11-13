@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 from fractions import Fraction
+from struct import pack, unpack
+from typing import TYPE_CHECKING
 
 from png._validation import check_integer
+from png.chunk import PngChunk
 from png.error import PngValidationError
 from png.format import PngBlendOp, PngDisposeOp
+
+if TYPE_CHECKING:
+    from png.image import PngImage
 
 
 class PngFrameControl:
@@ -55,6 +61,26 @@ class PngFrameControl:
     def delay(self) -> Fraction:
         """Display duration in seconds; a zero denominator means 100."""
         return Fraction(self.delay_num, self.delay_den or 100)
+
+    @staticmethod
+    def from_chunk(chunk: PngChunk) -> PngFrameControl:
+        chunk.validate()
+        if chunk.type != b'fcTL' or chunk.length != 26:
+            raise PngValidationError('fcTL must contain 26 data bytes')
+        _, width, height, x, y, numerator, denominator, disposal, blend = unpack('>IIIIIHHBB', chunk.data)
+        control = PngFrameControl((width, height), (x, y), numerator, denominator, disposal, blend)
+        control.validate((width + x, height + y))
+        control.dispose_op = PngDisposeOp(disposal)
+        control.blend_op = PngBlendOp(blend)
+        return control
+
+    def to_chunk(self, sequence_number: int) -> PngChunk:
+        check_integer('sequence number', sequence_number, 0, 0x7FFFFFFF)
+        self.validate((self.width + self.offset_x, self.height + self.offset_y))
+        return PngChunk(b'fcTL', pack(
+            '>IIIIIHHBB', sequence_number, self.width, self.height, self.offset_x, self.offset_y,
+            self.delay_num, self.delay_den, self.dispose_op, self.blend_op,
+        ))
 
     def validate(self, canvas: tuple[int, int]) -> None:
         for name, value in (('frame width', self.width), ('frame height', self.height)):
@@ -123,3 +149,14 @@ class PngAnimation:
                 raise PngValidationError('the default frame must cover the entire canvas at offset (0, 0)')
         for frame in self.frames:
             frame.control.validate(canvas)
+
+
+class PngRenderedFrame:
+    """An independent full-canvas RGBA image and its exact display duration."""
+
+    image: PngImage
+    delay: Fraction
+
+    def __init__(self, image: PngImage, delay: Fraction) -> None:
+        self.image = image
+        self.delay = delay
