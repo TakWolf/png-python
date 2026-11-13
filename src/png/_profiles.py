@@ -2,6 +2,7 @@
 
 from struct import unpack_from
 
+from png._icc_lut import LUT_TYPES, curve_end, validate_lut, validate_lut_context
 from png.error import PngUnsupportedError, PngValidationError
 
 
@@ -97,6 +98,8 @@ def validate_icc_tags(profile: bytes) -> None:
         if extent not in checked:
             _validate_icc_tag_data(profile[offset:offset + size])
             checked.add(extent)
+        if kind in LUT_TYPES:
+            validate_lut_context(profile, signature, memoryview(profile)[offset:offset + size])
 
     required = {b'desc', b'cprt'}
     if profile_class != b'link':
@@ -131,16 +134,11 @@ def validate_icc_tags(profile: bytes) -> None:
 def _validate_icc_tag_data(data: bytes) -> None:
     kind = data[:4]
     size = len(data)
-    if kind == b'curv':
-        if size < 12 or size != 12 + 2 * unpack_from('>I', data, 8)[0]:
+    if kind in (b'curv', b'para'):
+        if curve_end(data) != size:
             raise PngValidationError('ICC curve count does not match tag size')
-    elif kind == b'para':
-        if size < 12 or data[10:12] != bytes(2):
-            raise PngValidationError('ICC parametric curve header is invalid')
-        function, = unpack_from('>H', data, 8)
-        counts = (1, 3, 4, 5, 7)
-        if function >= len(counts) or size != 12 + 4 * counts[function]:
-            raise PngValidationError('ICC parametric curve function or parameter count is invalid')
+    elif kind in LUT_TYPES:
+        validate_lut(data)
     elif kind == b'XYZ ':
         if size < 20 or (size - 8) % 12:
             raise PngValidationError('ICC XYZ array has an invalid size')

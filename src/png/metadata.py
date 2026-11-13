@@ -234,8 +234,9 @@ class PngIccProfile(PngMetadata):
     def validate_profile_tags(self) -> None:
         """Check structure, common required tags and selected v2/v4 tag contents.
 
-        Includes v4 class-specific required tags, but not LUT internals or full
-        colorimetric semantics. Readers keep the original bytes for inspection.
+        Includes v4 class-specific required tags and the four table-based LUT
+        layouts, but not full colorimetric semantics or multi-process elements.
+        Readers keep the original bytes for inspection.
         """
         self._validate_header()
         validate_icc_tags(self.profile)
