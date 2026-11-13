@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from io import BytesIO
 from struct import pack, unpack
 from typing import BinaryIO
@@ -35,7 +36,10 @@ class PngChunk:
         return PngChunk._parse(stream, budget)
 
     @staticmethod
-    def _parse(stream: BinaryIO, budget: ReadBudget) -> PngChunk:
+    def _parse(
+            stream: BinaryIO, budget: ReadBudget,
+            *, check_header: Callable[[bytes, int], None] | None = None,
+    ) -> PngChunk:
         budget.start_chunk()
         length, chunk_type = unpack('>I4s', read_exact(stream, 8))
         if length > 0x7FFFFFFF:
@@ -45,6 +49,8 @@ class PngChunk:
             chunk.validate()
         except PngValidationError as error:
             raise PngParseError(str(error)) from error
+        if check_header is not None:
+            check_header(chunk_type, length)
         budget.chunk(length)
         chunk.data = read_exact(stream, length)
         expected, = unpack('>I', read_exact(stream, 4))

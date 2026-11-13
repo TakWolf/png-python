@@ -6,7 +6,7 @@ from typing import BinaryIO
 
 from png._stream import read_exact, write_all
 from png._limits import ReadBudget
-from png._structure import UNDERSTOOD_TYPES, validate_structure
+from png._structure import ChunkStructure, UNDERSTOOD_TYPES, validate_structure
 from png.chunk import PngChunk
 from png.error import PngParseError, PngValidationError
 from png.header import PngHeader
@@ -44,13 +44,14 @@ class PngDocument:
         if read_exact(stream, 8) != _SIGNATURE:
             raise PngParseError('not a valid PNG signature')
         document = PngDocument()
+        structure = ChunkStructure()
         while True:
-            chunk = PngChunk._parse(stream, budget)
-            if not document.chunks:
-                try:
-                    PngHeader.from_chunk(chunk)
-                except PngValidationError as error:
-                    raise PngParseError(str(error)) from error
+            try:
+                chunk = PngChunk._parse(stream, budget, check_header=structure.check)
+                if not document.chunks:
+                    structure.header = PngHeader.from_chunk(chunk)
+            except PngValidationError as error:
+                raise PngParseError(str(error)) from error
             budget.inspect(chunk.type, chunk.data)
             document.chunks.append(chunk)
             if chunk.type == b'IEND':
