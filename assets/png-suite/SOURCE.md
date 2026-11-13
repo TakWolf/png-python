@@ -22,5 +22,6 @@ tests round-trip all 162 valid files without changing their raw chunks and
 reject the 14 deliberately invalid files. Pixel tests decode and re-encode
 all valid files, compare basic Adam7/non-interlaced pairs and common regions
 of filter fixtures, and cover encoder settings and malformed pixel streams.
-Complete metadata and APNG semantics are not covered at this stage; this is
-not full conformance coverage.
+Supported color, text, physical-dimension, time and Exif metadata are also
+tested for semantic preservation across pixel re-encoding. APNG uses the WPT
+fixtures in `assets/wpt/`; this is not full conformance coverage.

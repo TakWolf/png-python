@@ -222,7 +222,7 @@ def test_ancillary_copy_policy_and_positions(png_suite_dir: Path) -> None:
     positions = [index for index, chunk in enumerate(encoded.chunks) if chunk.type == b'vpAg']
     assert positions[0] < kinds.index(b'IDAT') < positions[1]
     assert not encoded.find_chunks(b'vpAG')
-    assert not encoded.find_chunks(b'gAMA')
+    assert encoded.find_chunks(b'gAMA')
     assert any(chunk.type == b'vpAG' for chunk in image.ancillary_chunks)
 
 

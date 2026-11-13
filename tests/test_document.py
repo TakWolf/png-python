@@ -210,7 +210,7 @@ def test_critical_edit_omits_unknown_unsafe_chunks(document: PngDocument) -> Non
     output = PngDocument.parse(cloned.dump_to_bytes())
     assert output.find_chunks(b'vpAg')[0].data == b'safe'
     assert not output.find_chunks(b'vpAG')
-    assert not output.find_chunks(b'gAMA')  # Still treated as opaque metadata.
+    assert output.find_chunks(b'gAMA')  # Supported color metadata survives a critical edit.
     assert cloned.find_chunks(b'vpAG')  # Saving does not mutate the model.
     assert len(original.find_chunks(b'IDAT')) == 1
     assert b''.join(chunk.data for chunk in output.find_chunks(b'IDAT')) == payload

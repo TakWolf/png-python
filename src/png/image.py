@@ -8,7 +8,7 @@ from typing import BinaryIO
 
 from png._apng import frame_header, scan_animation
 from png._pixels import decode_pixels, encode_pixels
-from png._structure import _BEFORE_PALETTE
+from png._structure import _BEFORE_PALETTE, _BEFORE_DATA
 from png._validation import check_integer
 from png.animation import PngAnimation, PngFrame, PngRenderedFrame
 from png.chunk import PngChunk
@@ -16,6 +16,7 @@ from png.document import PngDocument
 from png.error import PngParseError, PngValidationError
 from png.format import PngColorType, PngFilterType
 from png.header import PngHeader
+from png.metadata import METADATA_TYPES, PngMetadata, parse_metadata, validate_metadata_chunks
 
 
 class PngImage:
@@ -34,7 +35,8 @@ class PngImage:
     palette_alpha: list[int]
     animation: PngAnimation | None
     ancillary_chunks: list[PngChunk]
-    _source_ancillary: tuple[tuple[PngChunk, bytes, bytes, bool], ...] | None
+    metadata: list[PngMetadata]
+    _source_ancillary: tuple[tuple[PngChunk | PngMetadata, bytes, bytes, bool], ...] | None
 
     def __init__(
             self,
@@ -45,6 +47,7 @@ class PngImage:
             palette_alpha: list[int] | None = None,
             animation: PngAnimation | None = None,
             ancillary_chunks: list[PngChunk] | None = None,
+            metadata: list[PngMetadata] | None = None,
     ) -> None:
         self.header = header
         self.bitmap = bitmap if bitmap is not None else []
@@ -53,6 +56,7 @@ class PngImage:
         self.palette_alpha = palette_alpha if palette_alpha is not None else []
         self.animation = animation
         self.ancillary_chunks = ancillary_chunks if ancillary_chunks is not None else []
+        self.metadata = metadata if metadata is not None else []
         self._source_ancillary = None
 
     @staticmethod
@@ -85,9 +89,14 @@ class PngImage:
             elif chunk.type == b'IDAT':
                 before_data = False
             elif chunk.type not in (b'acTL', b'fcTL', b'fdAT') and not chunk.is_critical:
-                copied = PngChunk(chunk.type, chunk.data)
-                image.ancillary_chunks.append(copied)
-                original.append((copied, copied.type, copied.data, not before_data))
+                typed = parse_metadata(chunk)
+                if typed is not None:
+                    image.metadata.append(typed)
+                    original.append((typed, chunk.type, chunk.data, not before_data))
+                else:
+                    copied = PngChunk(chunk.type, chunk.data)
+                    image.ancillary_chunks.append(copied)
+                    original.append((copied, copied.type, copied.data, not before_data))
         image._source_ancillary = tuple(original)
         if header.color_type == PngColorType.INDEXED_COLOR:
             bitmaps = [image.bitmap] + ([frame.bitmap for frame in image.animation.frames] if image.animation else [])
@@ -126,19 +135,22 @@ class PngImage:
         check_integer('IDAT chunk size', idat_chunk_size, 1, 0x7FFFFFFF)
         encoded = encode_pixels(self.header, self.bitmap, filter_type, compression_level)
         before, after = [], []
-        for chunk in self.ancillary_chunks:
+        entries = [(item, item.to_chunk()) for item in self.metadata] + [(chunk, chunk) for chunk in self.ancillary_chunks]
+        for entry, chunk in entries:
             after_data = False
             if self._source_ancillary is not None:
                 # Re-encoding changes critical chunks. Until a metadata type
                 # has semantic support, apply the same conservative editor
                 # policy as PngDocument and omit unknown unsafe chunks.
-                if not chunk.safe_to_copy:
+                if chunk.type not in METADATA_TYPES and not chunk.safe_to_copy:
                     continue
-                origins = [origin for origin in self._source_ancillary if origin[0] is chunk]
+                origins = [origin for origin in self._source_ancillary if origin[0] is entry]
                 if not origins:
                     origins = [origin for origin in self._source_ancillary if origin[1:3] == (chunk.type, chunk.data)]
                 if origins:
                     after_data = origins[0][3]
+                if chunk.type in _BEFORE_DATA:
+                    after_data = False
             (after if after_data else before).append(PngChunk(chunk.type, chunk.data))
         chunks = [self.header.to_chunk()]
         chunks.extend(chunk for chunk in before if chunk.type in _BEFORE_PALETTE)
@@ -183,6 +195,10 @@ class PngImage:
         from png._composite import render_frames
         self.validate()
         yield from render_frames(self)
+
+    def find_metadata(self, chunk_type: bytes) -> list[PngMetadata]:
+        """Return references to supported metadata entries in list order."""
+        return [item for item in self.metadata if item.type == chunk_type]
 
     def dump(
             self,
@@ -233,6 +249,7 @@ class PngImage:
             chunk.validate()
             if chunk.is_critical or chunk.type in (b'tRNS', b'acTL', b'fcTL', b'fdAT'):
                 raise PngValidationError('image structure must use its dedicated fields, not ancillary_chunks')
+        validate_metadata_chunks([item.to_chunk() for item in self.metadata] + self.ancillary_chunks)
         color_type = PngColorType(self.header.color_type)
         if self.palette:
             if color_type in (PngColorType.GRAYSCALE, PngColorType.GRAYSCALE_ALPHA):

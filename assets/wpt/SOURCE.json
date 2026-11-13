@@ -421,6 +421,31 @@
       "path": "png/apng/support/solid-gray.png",
       "sha256": "715c993b54baf967dc48b2ad7abc4ca9b0610952b73673b883007f5c7d5f85f2",
       "git_blob": "8d29b4db629fba670a29b5fcb26380874f4ecafc"
+    },
+    {
+      "path": "png/support/cICP-and-iCCP.png",
+      "sha256": "fe5226d93c22156a497c6d814696621d82eb3f1e06ec6d1254533e4ba080c90d",
+      "git_blob": "71d88defc12b18b29d2c2dd4303e4bfb15d1a4c0"
+    },
+    {
+      "path": "png/support/cicp-display-p3.png",
+      "sha256": "49a7ec0f74fc88cd89e8c7ea90a331bba1c061f70678608a373eb1eef91429c6",
+      "git_blob": "dc5277bedd4c5a9789126e064bc95541d7972b9f"
+    },
+    {
+      "path": "png/support/exif-orientation-bottom-right.png",
+      "sha256": "7ca61584435756de2ca72d846f29b28f292d1bec34fa5d23c872fd982a9bd7ff",
+      "git_blob": "261d5f4c120d5bec05faab969b6476aa6f512989"
+    },
+    {
+      "path": "png/support/srgb_green.png",
+      "sha256": "2d08d3023fcbe9141ff17a7d0c94a8daa7d6bf813dc7e51d074a187824e8e580",
+      "git_blob": "a978f32536c3be6121e947f0312deaaeb7860bfc"
+    },
+    {
+      "path": "png/support/trns-high-bits-set.png",
+      "sha256": "a5e866a28f4a19504981a8e839799ab1511b4bfa182e84068a657797cb52e315",
+      "git_blob": "4e309a89a8a27a9f7afb6eee6a4a604a3ef7c249"
     }
   ]
 }

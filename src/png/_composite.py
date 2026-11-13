@@ -1,11 +1,13 @@
 from collections.abc import Iterator
 from fractions import Fraction
+from copy import deepcopy
 from typing import TYPE_CHECKING
 
 from png.animation import PngRenderedFrame
 from png.chunk import PngChunk
 from png.format import PngBlendOp, PngColorType, PngDisposeOp
 from png.header import PngHeader
+from png.metadata import COLOR_METADATA_TYPES
 
 if TYPE_CHECKING:
     from png.image import PngImage
@@ -46,13 +48,18 @@ def render_frames(image: 'PngImage') -> Iterator[PngRenderedFrame]:
     depth = 16 if image.header.bit_depth == 16 else 8
     maximum = (1 << depth) - 1
     width, height = image.dimensions
-    color_types = {b'cHRM', b'gAMA', b'iCCP', b'sRGB', b'cICP', b'mDCV', b'cLLI'}
+    color_types = COLOR_METADATA_TYPES
+    if image.header.color_type in (PngColorType.GRAYSCALE, PngColorType.GRAYSCALE_ALPHA):
+        # An ICC profile for gray samples cannot describe an RGB(A) snapshot.
+        # Profile conversion belongs to the separate color-management layer.
+        color_types = color_types - {b'iCCP'}
 
     def snapshot(bitmap: list[list[int]]) -> PngImage:
         return PngImage(
             PngHeader(image.dimensions, depth), bitmap,
             ancillary_chunks=[PngChunk(chunk.type, chunk.data) for chunk in image.ancillary_chunks
                               if chunk.type in color_types],
+            metadata=[deepcopy(item) for item in image.metadata if item.type in color_types],
         )
 
     if image.animation is None:

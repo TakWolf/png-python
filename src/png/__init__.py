@@ -10,6 +10,13 @@ from png.format import (
     PngFilterMethod,
     PngFilterType,
     PngInterlaceMethod,
+    PngRenderingIntent,
+    PngPhysicalUnit,
 )
 from png.header import PngHeader
 from png.image import PngImage
+from png.metadata import (
+    PngMetadata, PngGamma, PngChromaticities, PngSrgb, PngCicp,
+    PngMasteringDisplayColorVolume, PngContentLightLevel, PngIccProfile,
+    PngText, PngCompressedText, PngInternationalText, PngPhysicalDimensions, PngTime, PngExif,
+)

@@ -61,3 +61,17 @@ class PngDisposeOp(IntEnum):
 class PngBlendOp(IntEnum):
     SOURCE = 0
     OVER = 1
+
+
+@unique
+class PngRenderingIntent(IntEnum):
+    PERCEPTUAL = 0
+    RELATIVE_COLORIMETRIC = 1
+    SATURATION = 2
+    ABSOLUTE_COLORIMETRIC = 3
+
+
+@unique
+class PngPhysicalUnit(IntEnum):
+    UNKNOWN = 0
+    METRE = 1

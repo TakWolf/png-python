@@ -25,7 +25,7 @@ _BASIC = sorted(path.name for path in Path(__file__).parents[1].joinpath('assets
 def test_wpt_provenance() -> None:
     manifest = json.loads(_WPT_ROOT.joinpath('SOURCE.json').read_text())
     assert manifest['commit'] == '44d24bce619f53d07b311f2732f2c50adc407399'
-    assert len(manifest['files']) == 84
+    assert len(manifest['files']) == 89
     assert len(_ANIMATED) == 35
     assert len(_VISUAL) == 28
     for entry in manifest['files']:
@@ -88,10 +88,10 @@ def test_wpt_final_state_matches_official_reference(name: str) -> None:
 
 def test_color_metadata_inherited_by_rendered_frame() -> None:
     image = PngImage.load(_APNG_ROOT.joinpath('support', '062.png'))
-    expected = [chunk.data for chunk in image.ancillary_chunks if chunk.type == b'cICP']
+    expected = [item.to_chunk().data for item in image.find_metadata(b'cICP')]
     assert len(expected) == 1
     for rendered in image.render_frames():
-        assert [chunk.data for chunk in rendered.image.ancillary_chunks if chunk.type == b'cICP'] == expected
+        assert [item.to_chunk().data for item in rendered.image.find_metadata(b'cICP')] == expected
 
 
 @pytest.mark.parametrize('name', _BASIC)
