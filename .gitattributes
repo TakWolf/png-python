@@ -1,1 +1,2 @@
 /assets/wpt/** -text
+/assets/iana/*-registry.txt -text

@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from fractions import Fraction
-import re
 from struct import iter_unpack, pack, unpack
 from typing import TYPE_CHECKING
 import zlib
 
 from png._metadata import PngMetadata, _data, _string, _decode, _keyword, _split_keyword
 from png._limits import ReadBudget
+from png._language import validate_language_tag
 from png._validation import check_integer
 from png.chunk import PngChunk
 from png.error import PngValidationError
@@ -321,8 +321,7 @@ class PngInternationalText(PngMetadata):
 
     def to_chunk(self) -> PngChunk:
         language = _string(self.language_tag, 'ascii')
-        if language and re.fullmatch(rb'[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*', language) is None:
-            raise PngValidationError('invalid language tag syntax')
+        validate_language_tag(language)
         if not isinstance(self.compressed, bool):
             raise PngValidationError('iTXt compressed must be bool')
         text = _string(self.text, 'utf-8')
