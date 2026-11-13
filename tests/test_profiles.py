@@ -37,6 +37,7 @@ def test_official_icc_profiles_pass_and_embed_without_rewriting(assets_dir: Path
     original = assets_dir.joinpath('icc', name).read_bytes()
     metadata = PngIccProfile('Official ICC', original)
     metadata.validate_profile_structure()
+    metadata.validate_profile_tags()
     image = PngImage.load(png_suite_dir.joinpath('basn2c08.png'))
     image.metadata.append(metadata)
     restored = PngImage.parse(image.dump_to_bytes())

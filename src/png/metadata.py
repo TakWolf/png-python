@@ -10,7 +10,7 @@ import zlib
 from png._metadata import PngMetadata, _data, _string, _decode, _keyword, _split_keyword
 from png._limits import ReadBudget
 from png._language import validate_language_tag
-from png._profiles import validate_icc_structure, validate_exif_structure
+from png._profiles import validate_icc_structure, validate_icc_tags, validate_exif_structure
 from png._validation import check_integer
 from png.chunk import PngChunk
 from png.error import PngValidationError
@@ -230,6 +230,15 @@ class PngIccProfile(PngMetadata):
         """Check the ICC header/table extents, not color transforms or all tags."""
         self._validate_header()
         validate_icc_structure(self.profile)
+
+    def validate_profile_tags(self) -> None:
+        """Check structure, common required tags and selected v2/v4 tag contents.
+
+        Includes v4 class-specific required tags, but not LUT internals or full
+        colorimetric semantics. Readers keep the original bytes for inspection.
+        """
+        self._validate_header()
+        validate_icc_tags(self.profile)
 
     @staticmethod
     def from_chunk(chunk: PngChunk) -> PngIccProfile:
@@ -600,8 +609,11 @@ def validate_metadata_chunks(
     for chunk in chunks:
         metadata = parse_metadata(chunk, budget=budget)
         if metadata is not None:
-            if check_profile_structure and isinstance(metadata, (PngIccProfile, PngExif)):
-                metadata.validate_profile_structure()
+            if check_profile_structure:
+                if isinstance(metadata, PngIccProfile):
+                    metadata.validate_profile_tags()
+                elif isinstance(metadata, PngExif):
+                    metadata.validate_profile_structure()
             if chunk.type in parsed and chunk.type not in repeated:
                 raise PngValidationError(f'duplicate {chunk.type!r} metadata')
             if isinstance(metadata, PngSuggestedPalette):

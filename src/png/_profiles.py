@@ -1,4 +1,4 @@
-"""Structural bounds for opaque ICC and Exif payloads, without color transforms."""
+"""Checks for opaque ICC and Exif payloads, without color transforms."""
 
 from struct import unpack_from
 
@@ -43,6 +43,152 @@ def validate_icc_structure(profile: bytes) -> None:
     if profile[8] == 4:
         if len(profile) != ((previous_end + 3) & ~3) or any(profile[previous_end:]):
             raise PngValidationError('ICC v4 final padding or profile extent is invalid')
+
+
+_ICC_MATRIX_TAGS = frozenset((b'rXYZ', b'gXYZ', b'bXYZ', b'rTRC', b'gTRC', b'bTRC'))
+_ICC_SINGLE_XYZ_TAGS = frozenset((b'wtpt', b'bkpt', b'lumi', b'rXYZ', b'gXYZ', b'bXYZ'))
+_ICC_TRC_TAGS = frozenset((b'kTRC', b'rTRC', b'gTRC', b'bTRC'))
+
+
+def validate_icc_tags(profile: bytes) -> None:
+    """Check common required tags and selected tag encodings, not all ICC semantics."""
+    validate_icc_structure(profile)
+    version = profile[8]
+    if version not in (2, 4):
+        raise PngUnsupportedError(f'ICC version {version} tag requirements are not supported')
+    profile_class = profile[12:16]
+    if profile_class not in (b'scnr', b'mntr', b'prtr', b'link', b'spac', b'abst', b'nmcl'):
+        raise PngValidationError('ICC profile class is not recognized')
+    count, = unpack_from('>I', profile, 128)
+    tags = {}
+    checked = set()
+    for index in range(count):
+        signature, offset, size = unpack_from('>4sII', profile, 132 + index * 12)
+        kind = profile[offset:offset + 4]
+        tags[signature] = kind
+        allowed = None
+        if signature == b'desc':
+            allowed = (b'mluc',) if version == 4 else (b'desc',)
+        elif signature == b'cprt':
+            allowed = (b'mluc',) if version == 4 else (b'text',)
+        elif signature in _ICC_SINGLE_XYZ_TAGS:
+            allowed = (b'XYZ ',)
+            if size != 20:
+                raise PngValidationError(f'ICC {signature!r} requires one XYZ value')
+        elif signature in _ICC_TRC_TAGS:
+            allowed = (b'curv', b'para') if version == 4 else (b'curv',)
+        elif signature == b'chad':
+            allowed = (b'sf32',)
+            if size != 44:
+                raise PngValidationError('ICC chad requires a nine-element matrix')
+            if version == 4:
+                a, b, c, d, e, f, g, h, i = unpack_from('>9i', profile, offset + 8)
+                if a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g) == 0:
+                    raise PngValidationError('ICC chad matrix must be invertible')
+        elif signature in (b'A2B0', b'A2B1', b'A2B2'):
+            allowed = (b'mft1', b'mft2', b'mAB ') if version == 4 else (b'mft1', b'mft2')
+        elif signature in (b'B2A0', b'B2A1', b'B2A2', b'gamt'):
+            allowed = (b'mft1', b'mft2', b'mBA ') if version == 4 else (b'mft1', b'mft2')
+        elif signature in (b'pseq', b'ncl2'):
+            allowed = (signature,)
+        if allowed is not None and kind not in allowed:
+            raise PngValidationError(f'ICC {signature!r} has an invalid tag type {kind!r}')
+        extent = (offset, size)
+        if extent not in checked:
+            _validate_icc_tag_data(profile[offset:offset + size])
+            checked.add(extent)
+
+    required = {b'desc', b'cprt'}
+    if profile_class != b'link':
+        required.add(b'wtpt')
+    # ICC v2's common tags are checked above. Its class-specific rules differ
+    # between historical revisions; do not impose v4-only requirements on v2.
+    if version == 4:
+        if profile_class in (b'scnr', b'mntr', b'prtr'):
+            if profile[16:20] == b'GRAY':
+                required.add(b'kTRC')
+            elif profile_class == b'prtr':
+                required.update((b'A2B0', b'A2B1', b'A2B2', b'B2A0', b'B2A1', b'B2A2', b'gamt'))
+            elif _ICC_MATRIX_TAGS.issubset(tags) and profile[20:24] == b'XYZ ':
+                pass  # The matrix/TRC model is a complete alternative to a LUT.
+            else:
+                required.add(b'A2B0')
+                if profile_class == b'mntr':
+                    required.add(b'B2A0')
+        elif profile_class == b'spac':
+            required.update((b'A2B0', b'B2A0'))
+        elif profile_class == b'link':
+            required.update((b'A2B0', b'pseq'))
+        elif profile_class == b'abst':
+            required.add(b'A2B0')
+        elif profile_class == b'nmcl':
+            required.add(b'ncl2')
+    missing = required.difference(tags)
+    if missing:
+        raise PngValidationError(f'ICC required tags are missing: {sorted(missing)!r}')
+
+
+def _validate_icc_tag_data(data: bytes) -> None:
+    kind = data[:4]
+    size = len(data)
+    if kind == b'curv':
+        if size < 12 or size != 12 + 2 * unpack_from('>I', data, 8)[0]:
+            raise PngValidationError('ICC curve count does not match tag size')
+    elif kind == b'para':
+        if size < 12 or data[10:12] != bytes(2):
+            raise PngValidationError('ICC parametric curve header is invalid')
+        function, = unpack_from('>H', data, 8)
+        counts = (1, 3, 4, 5, 7)
+        if function >= len(counts) or size != 12 + 4 * counts[function]:
+            raise PngValidationError('ICC parametric curve function or parameter count is invalid')
+    elif kind == b'XYZ ':
+        if size < 20 or (size - 8) % 12:
+            raise PngValidationError('ICC XYZ array has an invalid size')
+    elif kind == b'sf32':
+        if (size - 8) % 4:
+            raise PngValidationError('ICC fixed-point array has an invalid size')
+    elif kind == b'text':
+        _validate_icc_ascii(data[8:])
+    elif kind == b'desc':
+        if size < 12:
+            raise PngValidationError('ICC description lacks its ASCII count')
+        ascii_end = 12 + unpack_from('>I', data, 8)[0]
+        if ascii_end + 8 > size:
+            raise PngValidationError('ICC description ASCII data exceeds the tag')
+        _validate_icc_ascii(data[12:ascii_end])
+        unicode_count, = unpack_from('>I', data, ascii_end + 4)
+        unicode_end = ascii_end + 8 + 2 * unicode_count
+        if unicode_end + 70 != size:
+            raise PngValidationError('ICC description Unicode or ScriptCode extent is invalid')
+        if unicode_count and data[unicode_end - 2:unicode_end] != bytes(2):
+            raise PngValidationError('ICC description Unicode string requires a terminator')
+        script_count = data[unicode_end + 2]
+        if script_count > 67 or (script_count and data[unicode_end + 2 + script_count] != 0):
+            raise PngValidationError('ICC description ScriptCode string is invalid')
+    elif kind == b'mluc':
+        if size < 16:
+            raise PngValidationError('ICC multilingual tag lacks its record header')
+        count, stride = unpack_from('>II', data, 8)
+        table_end = 16 + count * stride
+        if stride < 12 or table_end > size:
+            raise PngValidationError('ICC multilingual record table is invalid')
+        checked = set()
+        for index in range(count):
+            length, offset = unpack_from('>II', data, 20 + index * stride)
+            if length % 2 or offset < table_end or offset + length > size:
+                raise PngValidationError('ICC multilingual string exceeds the tag or has an odd length')
+            extent = (offset, length)
+            if extent not in checked:
+                try:
+                    data[offset:offset + length].decode('utf-16-be')
+                except UnicodeDecodeError as error:
+                    raise PngValidationError('ICC multilingual string is not UTF-16BE') from error
+                checked.add(extent)
+
+
+def _validate_icc_ascii(data: bytes) -> None:
+    if not data or data[-1] != 0 or any(value > 127 for value in data):
+        raise PngValidationError('ICC text requires null-terminated 7-bit ASCII')
 
 
 _TIFF_TYPE_SIZES = {1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8}
