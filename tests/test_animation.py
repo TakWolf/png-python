@@ -138,14 +138,13 @@ def test_apng_snapshots_inherit_pixel_dimensions_without_resampling(png_suite_di
 
 
 def test_gray_snapshot_preserves_pixel_dimensions_when_it_omits_gray_icc(
-        png_suite_dir: Path, icc_profile_bytes: bytes,
+        png_suite_dir: Path, gray_icc_profile_bytes: bytes,
 ) -> None:
     from png import PngIccProfile
 
     image = PngImage.load(png_suite_dir.joinpath('basn0g04.png'))
     physical, = PngImage.load(png_suite_dir.joinpath('cdfn2c08.png')).find_metadata(b'pHYs')
-    gray_profile = icc_profile_bytes[:16] + b'GRAY' + icc_profile_bytes[20:]
-    image.metadata.extend([physical, PngIccProfile('Gray header', gray_profile)])
+    image.metadata.extend([physical, PngIccProfile('Gray model', gray_icc_profile_bytes)])
     rendered, = image.render_frames()
     assert rendered.image.header.color_type == PngColorType.TRUECOLOR_ALPHA
     assert not rendered.image.find_metadata(b'iCCP')

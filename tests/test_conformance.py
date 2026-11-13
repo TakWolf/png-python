@@ -89,14 +89,12 @@ def test_valid_file_and_all_zero_iend_crc_still_report_original_error(
                                  'basn2c08.png', 'basn2c16.png', 'basn3p01.png', 'basn3p08.png',
                                  'basn6a08.png', 'basn6a16.png'])
 def test_icc_data_space_matches_all_png_color_types(
-        png_suite_dir: Path, icc_profile_bytes: bytes, name: str,
+        png_suite_dir: Path, icc_profile_bytes: bytes, gray_icc_profile_bytes: bytes, name: str,
 ) -> None:
     image = PngImage.load(png_suite_dir.joinpath(name))
     gray = image.header.color_type in (PngColorType.GRAYSCALE, PngColorType.GRAYSCALE_ALPHA)
     signature = b'GRAY' if gray else b'RGB '
-    # This changes only the header signature to test PNG's cross-chunk rule;
-    # it does not turn the fixture into an internally valid grayscale ICC profile.
-    profile = PngIccProfile('Fixture', _icc_with_space(icc_profile_bytes, signature))
+    profile = PngIccProfile('Fixture', gray_icc_profile_bytes if gray else icc_profile_bytes)
     image.metadata.append(profile)
     image.validate()
     restored = PngImage.parse(image.dump_to_bytes())

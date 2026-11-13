@@ -235,7 +235,7 @@ class PngIccProfile(PngMetadata):
     def validate_profile_tags(self) -> None:
         """Check structure, header fields/ID and selected v2/v4 tag contents.
 
-        Includes v4 class-specific required tags and the four table-based LUT
+        Includes v2/v4 class-specific required tags and the four table-based LUT
         layouts and known multi-process element encodings. Does not evaluate
         colorimetric transforms. Readers keep the original bytes for inspection.
         """

@@ -111,28 +111,34 @@ def validate_icc_tags(profile: bytes) -> None:
     required = {b'desc', b'cprt'}
     if profile_class != b'link':
         required.add(b'wtpt')
-    # ICC v2's common tags are checked above. Its class-specific rules differ
-    # between historical revisions; do not impose v4-only requirements on v2.
-    if version == 4:
-        if profile_class in (b'scnr', b'mntr', b'prtr'):
-            if profile[16:20] == b'GRAY':
-                required.add(b'kTRC')
-            elif profile_class == b'prtr':
-                required.update((b'A2B0', b'A2B1', b'A2B2', b'B2A0', b'B2A1', b'B2A2', b'gamt'))
-            elif _ICC_MATRIX_TAGS.issubset(tags) and profile[20:24] == b'XYZ ':
-                pass  # The matrix/TRC model is a complete alternative to a LUT.
-            else:
-                required.add(b'A2B0')
-                if profile_class == b'mntr':
-                    required.add(b'B2A0')
-        elif profile_class == b'spac':
-            required.update((b'A2B0', b'B2A0'))
-        elif profile_class == b'link':
-            required.update((b'A2B0', b'pseq'))
-        elif profile_class == b'abst':
+    # ICC.1:2001-04 supplies v2 requirements; ICC.1:2022 supplies v4's.
+    # In particular, the v2 RGB display matrix tags are still required when
+    # optional LUTs are present. V4 instead permits a separate LUT-only model.
+    if profile_class in (b'scnr', b'mntr', b'prtr'):
+        if profile[16:20] == b'GRAY':
+            required.add(b'kTRC')
+        elif profile_class == b'prtr':
+            required.update((b'A2B0', b'A2B1', b'A2B2', b'B2A0', b'B2A1', b'B2A2', b'gamt'))
+        elif version == 2 and profile_class == b'mntr':
+            required.update(_ICC_MATRIX_TAGS)
+            if profile[20:24] == b'Lab ' and not any(
+                    tag in tags for tag in (b'A2B0', b'A2B1', b'A2B2', b'B2A0', b'B2A1', b'B2A2')
+            ):
+                raise PngValidationError('ICC v2 Lab display requires an A2B or B2A LUT tag')
+        elif _ICC_MATRIX_TAGS.issubset(tags) and profile[20:24] == b'XYZ ':
+            pass  # The input/v4 display matrix model is an alternative to a LUT.
+        else:
             required.add(b'A2B0')
-        elif profile_class == b'nmcl':
-            required.add(b'ncl2')
+            if profile_class == b'mntr':
+                required.add(b'B2A0')
+    elif profile_class == b'spac':
+        required.update((b'A2B0', b'B2A0'))
+    elif profile_class == b'link':
+        required.update((b'A2B0', b'pseq'))
+    elif profile_class == b'abst':
+        required.add(b'A2B0')
+    elif profile_class == b'nmcl':
+        required.add(b'ncl2')
     missing = required.difference(tags)
     if missing:
         raise PngValidationError(f'ICC required tags are missing: {sorted(missing)!r}')
