@@ -185,7 +185,7 @@ def test_actual_animation_frames_cannot_bypass_declared_limit(png_suite_dir: Pat
 @pytest.mark.parametrize(('item', 'decoded_size'), [
     (PngText('K', 'abc'), 5),
     (PngCompressedText('K', 'abc'), 6),
-    ('icc_profile', 2991),
+    ('icc_profile', 3027),
     (PngInternationalText('K', '中文', 'zh', '说明', compressed=False), 20),
     (PngInternationalText('K', '中文', 'zh', '说明', compressed=True), 20),
     (PngChunk(b'vpAg', b'unknown'), 7),

@@ -171,8 +171,8 @@ def test_png_cannot_embed_other_icc_data_color_spaces(icc_profile_bytes: bytes, 
         PngIccProfile('Other', _icc_with_space(icc_profile_bytes, signature)).to_chunk()
 
 
-def test_icc_header_properties_derive_from_current_payload(icc_profile_bytes: bytes) -> None:
-    profile = PngIccProfile('Original', icc_profile_bytes)
+def test_icc_header_properties_derive_from_current_payload(truncated_icc_profile_bytes: bytes) -> None:
+    profile = PngIccProfile('Original', truncated_icc_profile_bytes)
     assert profile.color_space == b'RGB '
     assert profile.declared_size == 2992
     assert len(profile.profile) == 2988
@@ -184,16 +184,21 @@ def test_icc_header_properties_derive_from_current_payload(icc_profile_bytes: by
     assert profile.declared_size == 2992
 
 
-def test_wpt_truncated_inner_icc_remains_opaque_and_unchanged(assets_dir: Path, icc_profile_bytes: bytes) -> None:
+def test_wpt_truncated_inner_icc_is_preserved_for_inspection_but_not_written(
+        assets_dir: Path, truncated_icc_profile_bytes: bytes,
+) -> None:
     # The final chad entry ends at 2992, four bytes beyond this WPT payload.
-    # Header/context validation must not claim full ICC tag validation or repair it.
+    # Reading keeps the original bytes; the writer must not silently repair them.
     document = PngDocument.load(assets_dir.joinpath('wpt', 'png', 'support', 'cICP-and-iCCP.png'))
     image = PngImage.from_document(document)
     profile, = image.find_metadata(b'iCCP')
-    assert profile.profile == icc_profile_bytes
+    assert profile.profile == truncated_icc_profile_bytes
     assert profile.declared_size - len(profile.profile) == 4
-    restored = PngImage.parse(image.dump_to_bytes())
-    assert restored.find_metadata(b'iCCP')[0].profile == icc_profile_bytes
+    with pytest.raises(PngValidationError, match='ICC declared size'):
+        image.dump_to_bytes()
+    with pytest.raises(PngValidationError, match='ICC declared size'):
+        document.dump_to_bytes()
+    assert image.find_metadata(b'iCCP')[0].profile == truncated_icc_profile_bytes
 
 
 def test_gray_icc_is_not_silently_attached_to_rgb_composite(icc_profile_bytes: bytes) -> None:

@@ -115,7 +115,9 @@ class ChunkStructure:
             raise PngValidationError('sBIT has the wrong sample count for the color type')
 
 
-def validate_structure(chunks: list[PngChunk], *, limits: PngReadLimits | None = None) -> None:
+def validate_structure(
+        chunks: list[PngChunk], *, limits: PngReadLimits | None = None, check_profile_structure: bool = False,
+) -> None:
     budget = ReadBudget(limits)
     budget.signature()
     if not chunks or chunks[0].type != b'IHDR':
@@ -130,4 +132,5 @@ def validate_structure(chunks: list[PngChunk], *, limits: PngReadLimits | None =
         budget.chunk(chunk.length)
         budget.inspect(chunk.type, chunk.data)
     scan_animation(chunks, header)
-    validate_metadata_chunks(chunks, header, structure.palette_size, budget=budget)
+    validate_metadata_chunks(chunks, header, structure.palette_size, budget=budget,
+                             check_profile_structure=check_profile_structure)

@@ -134,7 +134,7 @@ class PngDocument:
                 critical_count += chunk.is_critical
                 if chunk.type == b'IDAT':
                     before_data = False
-        validate_structure(chunks)
+        validate_structure(chunks, check_profile_structure=True)
         if any(chunk.reserved_bit for chunk in chunks):
             raise PngValidationError('cannot encode a chunk with a reserved lowercase third letter')
         return chunks
@@ -149,7 +149,8 @@ class PngDocument:
         """Write raw chunks, applying unknown-chunk editing rules.
 
         Loaded unknown unsafe chunks are omitted if critical chunks changed.
-        This does not modify self.chunks or re-encode compressed pixels.
+        ICC and Exif structure is checked before writing any bytes. This does
+        not modify self.chunks or re-encode compressed pixels.
         """
         self._dump(stream, self._output_chunks())
 

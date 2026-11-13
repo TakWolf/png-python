@@ -21,6 +21,12 @@ def png_suite_dir(assets_dir: Path) -> Path:
 
 @pytest.fixture(scope='session')
 def icc_profile_bytes(assets_dir: Path) -> bytes:
+    """Unmodified, structurally complete official ICC v2 sRGB profile."""
+    return assets_dir.joinpath('icc', 'sRGB2014.icc').read_bytes()
+
+
+@pytest.fixture(scope='session')
+def truncated_icc_profile_bytes(assets_dir: Path) -> bytes:
     """Original WPT ICC payload, independently decompressed with stdlib zlib."""
     from png import PngDocument
 

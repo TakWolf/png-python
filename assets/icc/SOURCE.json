@@ -1,0 +1,18 @@
+{
+  "files": [
+    {
+      "path": "sRGB2014.icc",
+      "url": "https://registry.color.org/rgb-registry/profiles/sRGB2014.icc",
+      "retrieved": "2026-11-14",
+      "size": 3024,
+      "sha256": "384b832de3412066743b52a75ee906b6fb9fb8d9e09e936fc2c43223815c6e0a"
+    },
+    {
+      "path": "sRGB_v4_ICC_preference.icc",
+      "url": "https://registry.color.org/rgb-registry/profiles/sRGB_v4_ICC_preference.icc",
+      "retrieved": "2026-11-14",
+      "size": 60960,
+      "sha256": "83174717332326ddc198d9df188a4daec27b8979ba152cebbfc470c793d0bb11"
+    }
+  ]
+}

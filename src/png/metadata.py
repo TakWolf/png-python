@@ -10,6 +10,7 @@ import zlib
 from png._metadata import PngMetadata, _data, _string, _decode, _keyword, _split_keyword
 from png._limits import ReadBudget
 from png._language import validate_language_tag
+from png._profiles import validate_icc_structure, validate_exif_structure
 from png._validation import check_integer
 from png.chunk import PngChunk
 from png.error import PngValidationError
@@ -225,6 +226,11 @@ class PngIccProfile(PngMetadata):
         self._validate_header()
         return unpack('>I', self.profile[:4])[0]
 
+    def validate_profile_structure(self) -> None:
+        """Check the ICC header/table extents, not color transforms or all tags."""
+        self._validate_header()
+        validate_icc_structure(self.profile)
+
     @staticmethod
     def from_chunk(chunk: PngChunk) -> PngIccProfile:
         return PngIccProfile._from_chunk(chunk, ReadBudget(None))
@@ -397,6 +403,10 @@ class PngExif(PngMetadata):
 
     def __init__(self, profile: bytes) -> None:
         self.profile = profile
+
+    def validate_profile_structure(self) -> None:
+        """Check TIFF directory/value bounds without interpreting all Exif tags."""
+        validate_exif_structure(self.profile)
 
     @staticmethod
     def from_chunk(chunk: PngChunk) -> PngExif:
@@ -580,7 +590,7 @@ def parse_metadata(chunk: PngChunk, *, budget: ReadBudget | None = None) -> PngM
 
 def validate_metadata_chunks(
         chunks: list[PngChunk], header: PngHeader | None = None, palette_size: int = 0,
-        *, for_encoding: bool = False, budget: ReadBudget | None = None,
+        *, for_encoding: bool = False, budget: ReadBudget | None = None, check_profile_structure: bool = False,
 ) -> None:
     if budget is None:
         budget = ReadBudget(None)
@@ -590,6 +600,8 @@ def validate_metadata_chunks(
     for chunk in chunks:
         metadata = parse_metadata(chunk, budget=budget)
         if metadata is not None:
+            if check_profile_structure and isinstance(metadata, (PngIccProfile, PngExif)):
+                metadata.validate_profile_structure()
             if chunk.type in parsed and chunk.type not in repeated:
                 raise PngValidationError(f'duplicate {chunk.type!r} metadata')
             if isinstance(metadata, PngSuggestedPalette):

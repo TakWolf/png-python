@@ -32,6 +32,14 @@ def test_pngsuite_metadata_is_preserved(png_suite_dir: Path, name: str) -> None:
 @pytest.mark.parametrize('path', sorted(_WPT.glob('*.png')), ids=lambda path: path.name)
 def test_wpt_color_and_exif_metadata(path: Path) -> None:
     image = PngImage.load(path)
+    if path.name == 'cICP-and-iCCP.png':
+        # Its ICC profile is truncated internally, despite being an official
+        # PNG fixture. Reading preserves it; conforming output must reject it.
+        with pytest.raises(PngValidationError, match='ICC declared size'):
+            image.dump_to_bytes()
+        assert image.find_metadata(b'iCCP')[0].declared_size == 2992
+        assert len(image.find_metadata(b'iCCP')[0].profile) == 2988
+        return
     restored = PngImage.parse(image.dump_to_bytes())
     assert restored.bitmap == image.bitmap
     assert [(item.type, item.to_chunk().data) for item in restored.metadata] == [
@@ -172,7 +180,9 @@ def test_icc_profile_bytes_preserved_and_decoded_with_independent_zlib() -> None
     assert isinstance(profile, PngIccProfile)
     assert profile.profile == expected
     assert profile.profile[36:40] == b'acsp'
-    assert PngImage.parse(image.dump_to_bytes()).find_metadata(b'iCCP')[0].profile == expected
+    with pytest.raises(PngValidationError, match='ICC declared size'):
+        image.dump_to_bytes()
+    assert image.to_document().find_chunks(b'iCCP')[0].data == profile.to_chunk().data
 
 
 def test_exif_profile_bytes_are_not_rewritten() -> None:
