@@ -11,3 +11,8 @@ def project_root_dir() -> Path:
 @pytest.fixture(scope='session')
 def assets_dir(project_root_dir: Path) -> Path:
     return project_root_dir.joinpath('assets')
+
+
+@pytest.fixture(scope='session')
+def png_suite_dir(assets_dir: Path) -> Path:
+    return assets_dir.joinpath('png-suite')

@@ -15,6 +15,7 @@ pip install png
 
 - [Portable Network Graphics (PNG) Specification and Extensions](https://www.libpng.org/pub/png/spec/)
 - [Portable Network Graphics (PNG) Specification (Third Edition)](https://www.w3.org/TR/png-3/)
+- [PngSuite](http://www.schaik.com/pngsuite/)
 
 ## License
 
