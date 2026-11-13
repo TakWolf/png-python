@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from io import BytesIO
+from struct import pack, unpack
+from typing import BinaryIO
 from zlib import crc32
 
-from png.error import PngValidationError
+from png._stream import read_exact, write_all
+from png.error import PngCrcError, PngParseError, PngValidationError
 
 
 class PngChunk:
@@ -19,6 +23,26 @@ class PngChunk:
     def __init__(self, chunk_type: bytes, data: bytes = b'') -> None:
         self.type = chunk_type
         self.data = data
+
+    @staticmethod
+    def parse(stream: bytes | BinaryIO) -> PngChunk:
+        """Read one chunk envelope, checking its name, length and CRC."""
+        if isinstance(stream, bytes):
+            stream = BytesIO(stream)
+        length, chunk_type = unpack('>I4s', read_exact(stream, 8))
+        if length > 0x7FFFFFFF:
+            raise PngParseError(f'chunk {chunk_type!r} exceeds the PNG length limit')
+        chunk = PngChunk(chunk_type)
+        try:
+            chunk.validate()
+        except PngValidationError as error:
+            raise PngParseError(str(error)) from error
+        chunk.data = read_exact(stream, length)
+        expected, = unpack('>I', read_exact(stream, 4))
+        actual = chunk.crc
+        if actual != expected:
+            raise PngCrcError(chunk.type, expected, actual)
+        return chunk
 
     @property
     def length(self) -> int:
@@ -56,3 +80,15 @@ class PngChunk:
             raise PngValidationError('chunk data must be bytes')
         if self.length > 0x7FFFFFFF:
             raise PngValidationError('chunk data exceeds the PNG length limit')
+
+    def dump(self, stream: BinaryIO) -> None:
+        """Write one envelope, deriving length and CRC from the current data."""
+        self.validate()
+        write_all(stream, pack('>I4s', self.length, self.type))
+        write_all(stream, self.data)
+        write_all(stream, pack('>I', self.crc))
+
+    def dump_to_bytes(self) -> bytes:
+        stream = BytesIO()
+        self.dump(stream)
+        return stream.getvalue()

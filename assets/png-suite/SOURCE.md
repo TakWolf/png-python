@@ -17,5 +17,7 @@ Files beginning with `x` are deliberately invalid test inputs. Interpret expecte
 behavior using the author's descriptions and the PNG specification, rather than
 assuming every `.png` file is valid.
 
-The initial model tests read IHDR fields from the basic `basn` / `basi` images.
-They do not yet test pixel decoding or claim coverage of the full suite.
+Model tests read IHDR fields from the basic `basn` / `basi` images. File-layer
+tests round-trip all 162 valid files without changing their raw chunks and
+reject the 14 deliberately invalid files. Pixel decoding and complete metadata
+semantics are not tested at this stage; this is not full conformance coverage.
