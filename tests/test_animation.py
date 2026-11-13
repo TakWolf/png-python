@@ -94,6 +94,64 @@ def test_color_metadata_inherited_by_rendered_frame() -> None:
         assert [item.to_chunk().data for item in rendered.image.find_metadata(b'cICP')] == expected
 
 
+@pytest.mark.parametrize('name', ['cdhn2c08.png', 'cdun2c08.png', 'cdsn2c08.png', 'cdfn2c08.png'])
+def test_static_rgba_snapshot_preserves_official_pixel_dimensions(png_suite_dir: Path, name: str) -> None:
+    image = PngImage.load(png_suite_dir.joinpath(name))
+    expected = image.to_document().find_chunks(b'pHYs')[0].data
+    rendered, = image.render_frames()
+    assert rendered.image.dimensions == image.dimensions
+    assert rendered.image.to_document().find_chunks(b'pHYs')[0].data == expected
+    restored = PngImage.parse(rendered.image.dump_to_bytes())
+    assert restored.find_metadata(b'pHYs')[0].to_chunk().data == expected
+
+
+@pytest.mark.parametrize('as_raw', [False, True])
+def test_apng_snapshots_inherit_pixel_dimensions_without_resampling(png_suite_dir: Path, as_raw: bool) -> None:
+    image = PngImage.load(_APNG_ROOT.joinpath('support', '007.png'))
+    baseline = [frame.image.bitmap for frame in image.render_frames()]
+    physical, = PngImage.load(png_suite_dir.joinpath('cdhn2c08.png')).find_metadata(b'pHYs')
+    original_bytes = physical.to_chunk().data
+    if as_raw:
+        original = physical.to_chunk()
+        image.ancillary_chunks.append(original)
+    else:
+        original = physical
+        image.metadata.append(original)
+    rendered = list(image.render_frames())
+    assert len(rendered) == len(baseline) > 1
+    for frame, expected_bitmap in zip(rendered, baseline):
+        assert frame.image.dimensions == image.dimensions
+        assert frame.image.bitmap == expected_bitmap
+        assert frame.image.to_document().find_chunks(b'pHYs')[0].data == original_bytes
+    # Snapshot metadata must be independent of both the input and other frames.
+    if as_raw:
+        copied = next(chunk for chunk in rendered[0].image.ancillary_chunks if chunk.type == b'pHYs')
+        assert copied is not original
+        copied.data = bytes(9)
+        assert original.data == original_bytes
+    else:
+        copied, = rendered[0].image.find_metadata(b'pHYs')
+        assert copied is not original
+        copied.pixels_per_unit_x = 99
+        assert original.to_chunk().data == original_bytes
+    assert rendered[1].image.to_document().find_chunks(b'pHYs')[0].data == original_bytes
+
+
+def test_gray_snapshot_preserves_pixel_dimensions_when_it_omits_gray_icc(
+        png_suite_dir: Path, icc_profile_bytes: bytes,
+) -> None:
+    from png import PngIccProfile
+
+    image = PngImage.load(png_suite_dir.joinpath('basn0g04.png'))
+    physical, = PngImage.load(png_suite_dir.joinpath('cdfn2c08.png')).find_metadata(b'pHYs')
+    gray_profile = icc_profile_bytes[:16] + b'GRAY' + icc_profile_bytes[20:]
+    image.metadata.extend([physical, PngIccProfile('Gray header', gray_profile)])
+    rendered, = image.render_frames()
+    assert rendered.image.header.color_type == PngColorType.TRUECOLOR_ALPHA
+    assert not rendered.image.find_metadata(b'iCCP')
+    assert rendered.image.find_metadata(b'pHYs')[0].to_chunk().data == physical.to_chunk().data
+
+
 @pytest.mark.parametrize('name', _BASIC)
 @pytest.mark.parametrize('interlace', list(PngInterlaceMethod))
 @pytest.mark.parametrize('poster', [True, False])
