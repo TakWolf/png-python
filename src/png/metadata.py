@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import zlib
 
 from png._metadata import PngMetadata, _data, _string, _decode, _keyword, _split_keyword
+from png._icc_header import validate_png_embedding
 from png._limits import ReadBudget
 from png._language import validate_language_tag
 from png._profiles import validate_icc_structure, validate_icc_tags, validate_exif_structure
@@ -232,7 +233,7 @@ class PngIccProfile(PngMetadata):
         validate_icc_structure(self.profile)
 
     def validate_profile_tags(self) -> None:
-        """Check structure, common required tags and selected v2/v4 tag contents.
+        """Check structure, header fields/ID and selected v2/v4 tag contents.
 
         Includes v4 class-specific required tags and the four table-based LUT
         layouts, but not full colorimetric semantics or multi-process elements.
@@ -612,6 +613,7 @@ def validate_metadata_chunks(
         if metadata is not None:
             if check_profile_structure:
                 if isinstance(metadata, PngIccProfile):
+                    validate_png_embedding(metadata.profile)
                     metadata.validate_profile_tags()
                 elif isinstance(metadata, PngExif):
                     metadata.validate_profile_structure()

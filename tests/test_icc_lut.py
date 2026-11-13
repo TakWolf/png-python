@@ -255,6 +255,7 @@ def test_official_lut_corruption_is_preserved_but_not_written(
         if signature == b'A2B0':
             # The containing ICC directory and LUT header remain legal.
             profile = _u32(profile, offset + 12, 0xFFFFFFFC)
+            profile = profile[:84] + bytes(16) + profile[100:]  # Isolate LUT validity from ID validity.
             break
     else:
         pytest.fail('Official profile has no A2B0 tag')

@@ -13,7 +13,7 @@ from png import (
 
 
 def _icc_with_space(profile: bytes, signature: bytes) -> bytes:
-    return profile[:16] + signature + profile[20:]
+    return profile[:16] + signature + profile[20:84] + bytes(16) + profile[100:]
 
 
 def _wire_bytes(document: PngDocument) -> bytes:

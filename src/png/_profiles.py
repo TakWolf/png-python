@@ -2,6 +2,7 @@
 
 from struct import unpack_from
 
+from png._icc_header import validate_header_fields
 from png._icc_lut import LUT_TYPES, curve_end, validate_lut, validate_lut_context
 from png.error import PngUnsupportedError, PngValidationError
 
@@ -60,6 +61,7 @@ def validate_icc_tags(profile: bytes) -> None:
     profile_class = profile[12:16]
     if profile_class not in (b'scnr', b'mntr', b'prtr', b'link', b'spac', b'abst', b'nmcl'):
         raise PngValidationError('ICC profile class is not recognized')
+    validate_header_fields(profile)
     count, = unpack_from('>I', profile, 128)
     tags = {}
     checked = set()

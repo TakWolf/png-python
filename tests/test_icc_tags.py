@@ -19,6 +19,7 @@ def _rebuild(profile: bytes, tags: dict[bytes, bytes], *, version: int | None = 
              profile_class: bytes | None = None, color_space: bytes | None = None) -> bytes:
     """Repack a legal directory so each vector isolates tag checks, not bounds."""
     header = bytearray(profile[:128])
+    header[84:100] = bytes(16)  # Repacked vectors no longer have the original Profile ID.
     if version is not None:
         header[8] = version
     if profile_class is not None:
