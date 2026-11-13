@@ -4,6 +4,7 @@ from struct import unpack_from
 
 from png._icc_header import validate_header_fields
 from png._icc_lut import LUT_TYPES, curve_end, validate_lut, validate_lut_context
+from png._icc_mpet import MPET_TAGS, validate_mpet, validate_mpet_context
 from png.error import PngUnsupportedError, PngValidationError
 
 
@@ -94,6 +95,8 @@ def validate_icc_tags(profile: bytes) -> None:
             allowed = (b'mft1', b'mft2', b'mBA ') if version == 4 else (b'mft1', b'mft2')
         elif signature in (b'pseq', b'ncl2'):
             allowed = (signature,)
+        elif version == 4 and signature in MPET_TAGS:
+            allowed = (b'mpet',)
         if allowed is not None and kind not in allowed:
             raise PngValidationError(f'ICC {signature!r} has an invalid tag type {kind!r}')
         extent = (offset, size)
@@ -102,6 +105,8 @@ def validate_icc_tags(profile: bytes) -> None:
             checked.add(extent)
         if kind in LUT_TYPES:
             validate_lut_context(profile, signature, memoryview(profile)[offset:offset + size])
+        elif kind == b'mpet':
+            validate_mpet_context(profile, signature, memoryview(profile)[offset:offset + size])
 
     required = {b'desc', b'cprt'}
     if profile_class != b'link':
@@ -141,6 +146,8 @@ def _validate_icc_tag_data(data: bytes) -> None:
             raise PngValidationError('ICC curve count does not match tag size')
     elif kind in LUT_TYPES:
         validate_lut(data)
+    elif kind == b'mpet':
+        validate_mpet(data)
     elif kind == b'XYZ ':
         if size < 20 or (size - 8) % 12:
             raise PngValidationError('ICC XYZ array has an invalid size')
