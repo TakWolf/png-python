@@ -16,7 +16,9 @@ from png.document import PngDocument
 from png.error import PngParseError, PngValidationError
 from png.format import PngColorType, PngFilterType
 from png.header import PngHeader
-from png.metadata import METADATA_TYPES, PngMetadata, parse_metadata, validate_metadata_chunks
+from png.metadata import (
+    METADATA_TYPES, PngMetadata, PngBackground, PngHistogram, parse_metadata, validate_metadata_chunks,
+)
 
 
 class PngImage:
@@ -91,6 +93,8 @@ class PngImage:
             elif chunk.type not in (b'acTL', b'fcTL', b'fdAT') and not chunk.is_critical:
                 typed = parse_metadata(chunk)
                 if typed is not None:
+                    if isinstance(typed, PngBackground) and typed.color is not None:
+                        typed.color = tuple(sample & ((1 << header.bit_depth) - 1) for sample in typed.color)
                     image.metadata.append(typed)
                     original.append((typed, chunk.type, chunk.data, not before_data))
                 else:
@@ -108,6 +112,8 @@ class PngImage:
                 image.palette.extend([(0, 0, 0)] * (largest_index + 1 - len(image.palette)))
                 if image.palette_alpha:
                     image.palette_alpha.extend([255] * (len(image.palette) - len(image.palette_alpha)))
+                if image.find_metadata(b'hIST'):
+                    image.recalculate_histogram()
         image.validate()
         return image
 
@@ -200,6 +206,47 @@ class PngImage:
         """Return references to supported metadata entries in list order."""
         return [item for item in self.metadata if item.type == chunk_type]
 
+    def recalculate_histogram(self) -> PngHistogram:
+        """Update/create hIST for indexed samples, including APNG local frames.
+
+        Counts up to 65535 are exact. Larger counts are scaled, preserving a
+        nonzero frequency for every used index. No color quantization is done.
+        """
+        self.header.validate()
+        if self.header.color_type != PngColorType.INDEXED_COLOR:
+            raise PngValidationError('histogram recalculation requires an indexed-color image')
+        if not 1 <= len(self.palette) <= 1 << self.header.bit_depth:
+            raise PngValidationError('histogram recalculation requires PLTE fitting the bit depth')
+        bitmaps = [self.bitmap]
+        self._validate_bitmap(self.bitmap, self.dimensions)
+        if self.animation is not None:
+            self.animation.validate(self.dimensions)
+            for frame in self.animation.frames:
+                self._validate_bitmap(frame.bitmap, frame.control.dimensions)
+                bitmaps.append(frame.bitmap)
+        frequencies = [0] * len(self.palette)
+        for bitmap in bitmaps:
+            for row in bitmap:
+                for index in row:
+                    frequencies[index] += 1
+        maximum = max(frequencies)
+        if maximum > 65535:
+            frequencies = [max(1, (value * 65535 + maximum // 2) // maximum) if value else 0
+                           for value in frequencies]
+        structured = self.find_metadata(b'hIST')
+        raw = [chunk for chunk in self.ancillary_chunks if chunk.type == b'hIST']
+        if len(structured) + len(raw) > 1:
+            raise PngValidationError('duplicate hIST metadata')
+        if structured:
+            result = structured[0]
+            result.frequencies[:] = frequencies
+        else:
+            result = PngHistogram(frequencies)
+            self.metadata.append(result)
+            if raw:
+                self.ancillary_chunks.remove(raw[0])
+        return result
+
     def dump(
             self,
             stream: BinaryIO,
@@ -249,7 +296,6 @@ class PngImage:
             chunk.validate()
             if chunk.is_critical or chunk.type in (b'tRNS', b'acTL', b'fcTL', b'fdAT'):
                 raise PngValidationError('image structure must use its dedicated fields, not ancillary_chunks')
-        validate_metadata_chunks([item.to_chunk() for item in self.metadata] + self.ancillary_chunks)
         color_type = PngColorType(self.header.color_type)
         if self.palette:
             if color_type in (PngColorType.GRAYSCALE, PngColorType.GRAYSCALE_ALPHA):
@@ -276,11 +322,20 @@ class PngImage:
                 raise PngValidationError('palette alpha requires matching indexed palette entries')
             for alpha in self.palette_alpha:
                 check_integer('palette alpha', alpha, 0, 255)
+        metadata_chunks = [item.to_chunk() for item in self.metadata] + self.ancillary_chunks
+        validate_metadata_chunks(metadata_chunks, self.header, len(self.palette), for_encoding=True)
         self._validate_bitmap(self.bitmap, self.dimensions)
         if self.animation is not None:
             self.animation.validate(self.dimensions)
             for frame in self.animation.frames:
                 self._validate_bitmap(frame.bitmap, frame.control.dimensions)
+        if self.header.color_type == PngColorType.INDEXED_COLOR:
+            histograms = [PngHistogram.from_chunk(chunk) for chunk in metadata_chunks if chunk.type == b'hIST']
+            if histograms:
+                frequencies = histograms[0].frequencies
+                bitmaps = [self.bitmap] + ([frame.bitmap for frame in self.animation.frames] if self.animation else [])
+                if any(frequencies[index] == 0 for bitmap in bitmaps for row in bitmap for index in row):
+                    raise PngValidationError('hIST must have a nonzero frequency for every used palette index')
 
     def _validate_bitmap(self, bitmap: list[list[int]], dimensions: tuple[int, int]) -> None:
         width, height = dimensions

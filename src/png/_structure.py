@@ -83,21 +83,5 @@ def validate_structure(chunks: list[PngChunk]) -> None:
                 raise PngValidationError('tRNS must contain two bytes per transparent color sample')
         else:
             raise PngValidationError('tRNS is forbidden for images with an alpha channel')
-    if b'hIST' in positions:
-        if not palette_size or chunks[positions[b'hIST'][0]].length != palette_size * 2:
-            raise PngValidationError('hIST requires one two-byte entry per PLTE entry')
-    if b'bKGD' in positions:
-        background = chunks[positions[b'bKGD'][0]]
-        size = {0: 2, 2: 6, 3: 1, 4: 2, 6: 6}[header.color_type]
-        if background.length != size:
-            raise PngValidationError('bKGD has the wrong size for the color type')
-        if header.color_type == PngColorType.INDEXED_COLOR and background.data[0] >= palette_size:
-            raise PngValidationError('bKGD index is outside PLTE')
-    if b'sBIT' in positions:
-        significant = chunks[positions[b'sBIT'][0]]
-        channels = 3 if header.color_type == PngColorType.INDEXED_COLOR else header.channels
-        maximum = 8 if header.color_type == PngColorType.INDEXED_COLOR else header.bit_depth
-        if significant.length != channels or any(not 1 <= value <= maximum for value in significant.data):
-            raise PngValidationError('sBIT sample depths must fit the color type and bit depth')
     scan_animation(chunks, header)
-    validate_metadata_chunks(chunks)
+    validate_metadata_chunks(chunks, header, palette_size)

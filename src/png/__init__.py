@@ -19,4 +19,5 @@ from png.metadata import (
     PngMetadata, PngGamma, PngChromaticities, PngSrgb, PngCicp,
     PngMasteringDisplayColorVolume, PngContentLightLevel, PngIccProfile,
     PngText, PngCompressedText, PngInternationalText, PngPhysicalDimensions, PngTime, PngExif,
+    PngBackground, PngHistogram, PngSignificantBits, PngSuggestedPalette, PngSuggestedPaletteEntry,
 )

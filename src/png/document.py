@@ -82,6 +82,7 @@ class PngDocument:
                 chunk.validate()
             current_critical = [(chunk.type, chunk.data) for chunk in chunks if chunk.is_critical]
             critical_changed = current_critical != original_critical
+            original_histograms = {data for _, kind, data in self._original_chunks if kind == b'hIST'}
             locations: dict[int, tuple[bytes, int, bool]] = {}
             copied_locations: dict[tuple[bytes, bytes], list[tuple[int, bool]]] = {}
             critical_count = 0
@@ -97,6 +98,11 @@ class PngDocument:
             critical_count = 0
             before_data = True
             for chunk in self.chunks:
+                # Pixel-dependent zero frequencies cannot be checked without
+                # decoding. Drop a loaded histogram after raw critical edits;
+                # PngImage can instead validate or explicitly recalculate it.
+                if chunk.type == b'hIST' and critical_changed and chunk.data in original_histograms:
+                    continue
                 if not chunk.is_critical and chunk.type not in UNDERSTOOD_TYPES:
                     # PNG section 14.2: never preserve unknown unsafe chunks
                     # after any addition, deletion, edit or reorder of criticals.

@@ -5,14 +5,17 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from fractions import Fraction
 import re
-from struct import pack, unpack
-from typing import ClassVar
+from struct import iter_unpack, pack, unpack
+from typing import ClassVar, TYPE_CHECKING
 import zlib
 
 from png._validation import check_integer
 from png.chunk import PngChunk
 from png.error import PngValidationError
-from png.format import PngPhysicalUnit, PngRenderingIntent
+from png.format import PngColorType, PngPhysicalUnit, PngRenderingIntent
+
+if TYPE_CHECKING:
+    from png.header import PngHeader
 
 
 def _data(chunk: PngChunk, kind: bytes, size: int | None = None) -> bytes:
@@ -430,11 +433,157 @@ class PngExif(PngMetadata):
         return PngChunk(self.type, self.profile)
 
 
+class PngBackground(PngMetadata):
+    type = b'bKGD'
+    color: tuple[int, ...] | None
+    palette_index: int | None
+
+    def __init__(self, color: tuple[int, ...] | None = None, palette_index: int | None = None) -> None:
+        self.color = color
+        self.palette_index = palette_index
+
+    @staticmethod
+    def from_chunk(chunk: PngChunk) -> PngBackground:
+        data = _data(chunk, b'bKGD')
+        if len(data) == 1:
+            return PngBackground(palette_index=data[0])
+        if len(data) not in (2, 6):
+            raise PngValidationError('bKGD must contain a palette index, grayscale sample or RGB samples')
+        return PngBackground(tuple(value for value, in iter_unpack('>H', data)))
+
+    def to_chunk(self) -> PngChunk:
+        if (self.color is None) == (self.palette_index is None):
+            raise PngValidationError('bKGD requires exactly one of color or palette_index')
+        if self.palette_index is not None:
+            check_integer('bKGD palette index', self.palette_index, 0, 255)
+            return PngChunk(self.type, bytes([self.palette_index]))
+        if len(self.color) not in (1, 3):
+            raise PngValidationError('bKGD color requires one grayscale or three RGB samples')
+        for sample in self.color:
+            check_integer('bKGD sample', sample, 0, 65535)
+        return PngChunk(self.type, pack(f'>{len(self.color)}H', *self.color))
+
+
+class PngHistogram(PngMetadata):
+    type = b'hIST'
+    frequencies: list[int]
+
+    def __init__(self, frequencies: list[int] | None = None) -> None:
+        self.frequencies = frequencies if frequencies is not None else []
+
+    @staticmethod
+    def from_chunk(chunk: PngChunk) -> PngHistogram:
+        data = _data(chunk, b'hIST')
+        if not 2 <= len(data) <= 512 or len(data) % 2:
+            raise PngValidationError('hIST requires 1-256 two-byte frequencies')
+        return PngHistogram([value for value, in iter_unpack('>H', data)])
+
+    def to_chunk(self) -> PngChunk:
+        if not 1 <= len(self.frequencies) <= 256:
+            raise PngValidationError('hIST requires 1-256 frequencies')
+        for frequency in self.frequencies:
+            check_integer('hIST frequency', frequency, 0, 65535)
+        return PngChunk(self.type, pack(f'>{len(self.frequencies)}H', *self.frequencies))
+
+
+class PngSignificantBits(PngMetadata):
+    type = b'sBIT'
+    bits: tuple[int, ...]
+
+    def __init__(self, bits: tuple[int, ...]) -> None:
+        self.bits = bits
+
+    @staticmethod
+    def from_chunk(chunk: PngChunk) -> PngSignificantBits:
+        result = PngSignificantBits(tuple(_data(chunk, b'sBIT')))
+        result.validate()
+        return result
+
+    def to_chunk(self) -> PngChunk:
+        if not 1 <= len(self.bits) <= 4:
+            raise PngValidationError('sBIT requires 1-4 sample depths')
+        for depth in self.bits:
+            check_integer('sBIT sample depth', depth, 1, 16)
+        return PngChunk(self.type, bytes(self.bits))
+
+
+class PngSuggestedPaletteEntry:
+    red: int
+    green: int
+    blue: int
+    alpha: int
+    frequency: int
+
+    def __init__(self, color: tuple[int, int, int, int], frequency: int = 0) -> None:
+        self.red, self.green, self.blue, self.alpha = color
+        self.frequency = frequency
+
+    @property
+    def color(self) -> tuple[int, int, int, int]:
+        return self.red, self.green, self.blue, self.alpha
+
+    @color.setter
+    def color(self, value: tuple[int, int, int, int]) -> None:
+        self.red, self.green, self.blue, self.alpha = value
+
+    def validate(self, sample_depth: int) -> None:
+        check_integer('sPLT sample depth', sample_depth, 8, 16)
+        if sample_depth not in (8, 16):
+            raise PngValidationError('sPLT sample depth must be 8 or 16')
+        for sample in self.color:
+            check_integer('sPLT sample', sample, 0, (1 << sample_depth) - 1)
+        check_integer('sPLT frequency', self.frequency, 0, 65535)
+
+
+class PngSuggestedPalette(PngMetadata):
+    type = b'sPLT'
+    name: str
+    sample_depth: int
+    entries: list[PngSuggestedPaletteEntry]
+
+    def __init__(self, name: str, sample_depth: int = 8,
+                 entries: list[PngSuggestedPaletteEntry] | None = None) -> None:
+        self.name = name
+        self.sample_depth = sample_depth
+        self.entries = entries if entries is not None else []
+
+    @staticmethod
+    def from_chunk(chunk: PngChunk) -> PngSuggestedPalette:
+        name, tail = _split_keyword(_data(chunk, b'sPLT'))
+        if not tail or tail[0] not in (8, 16):
+            raise PngValidationError('sPLT sample depth must be 8 or 16')
+        depth = tail[0]
+        size = 6 if depth == 8 else 10
+        if (len(tail) - 1) % size:
+            raise PngValidationError('sPLT contains an incomplete palette entry')
+        entries = [PngSuggestedPaletteEntry(values[:4], values[4])
+                   for values in iter_unpack('>4BH' if depth == 8 else '>5H', tail[1:])]
+        result = PngSuggestedPalette(name, depth, entries)
+        result.validate()
+        return result
+
+    def to_chunk(self) -> PngChunk:
+        name = _keyword(self.name)
+        check_integer('sPLT sample depth', self.sample_depth, 8, 16)
+        if self.sample_depth not in (8, 16):
+            raise PngValidationError('sPLT sample depth must be 8 or 16')
+        data = bytearray(name + b'\0' + bytes([self.sample_depth]))
+        previous_frequency = 65535
+        for entry in self.entries:
+            entry.validate(self.sample_depth)
+            if entry.frequency > previous_frequency:
+                raise PngValidationError('sPLT entries must be in nonincreasing frequency order')
+            previous_frequency = entry.frequency
+            data.extend(pack('>4BH' if self.sample_depth == 8 else '>5H', *entry.color, entry.frequency))
+        return PngChunk(self.type, bytes(data))
+
+
 _METADATA_CLASSES = {
     cls.type: cls for cls in (
         PngGamma, PngChromaticities, PngSrgb, PngCicp, PngMasteringDisplayColorVolume,
         PngContentLightLevel, PngIccProfile, PngText, PngCompressedText, PngInternationalText,
-        PngPhysicalDimensions, PngTime, PngExif,
+        PngPhysicalDimensions, PngTime, PngExif, PngBackground, PngHistogram,
+        PngSignificantBits, PngSuggestedPalette,
     )
 }
 METADATA_TYPES = frozenset(_METADATA_CLASSES)
@@ -446,14 +595,22 @@ def parse_metadata(chunk: PngChunk) -> PngMetadata | None:
     return cls.from_chunk(chunk) if cls is not None else None
 
 
-def validate_metadata_chunks(chunks: list[PngChunk]) -> None:
+def validate_metadata_chunks(
+        chunks: list[PngChunk], header: PngHeader | None = None, palette_size: int = 0,
+        *, for_encoding: bool = False,
+) -> None:
     parsed: dict[bytes, PngMetadata] = {}
-    repeated = {b'tEXt', b'zTXt', b'iTXt'}
+    repeated = {b'tEXt', b'zTXt', b'iTXt', b'sPLT'}
+    palette_names = set()
     for chunk in chunks:
         metadata = parse_metadata(chunk)
         if metadata is not None:
             if chunk.type in parsed and chunk.type not in repeated:
                 raise PngValidationError(f'duplicate {chunk.type!r} metadata')
+            if isinstance(metadata, PngSuggestedPalette):
+                if metadata.name in palette_names:
+                    raise PngValidationError(f'duplicate sPLT palette name: {metadata.name!r}')
+                palette_names.add(metadata.name)
             parsed[chunk.type] = metadata
     if b'mDCV' in parsed and b'cICP' not in parsed:
         raise PngValidationError('mDCV requires accompanying cICP metadata')
@@ -464,3 +621,25 @@ def validate_metadata_chunks(chunks: list[PngChunk]) -> None:
             expected = PngChromaticities((31270, 32900), (64000, 33000), (30000, 60000), (15000, 6000))
             if parsed[b'cHRM'].to_chunk().data != expected.to_chunk().data:
                 raise PngValidationError('sRGB requires standard sRGB chromaticities when cHRM is present')
+    if header is None:
+        return
+    if b'bKGD' in parsed:
+        background = parsed[b'bKGD']
+        if header.color_type == PngColorType.INDEXED_COLOR:
+            if background.palette_index is None or not 0 <= background.palette_index < palette_size:
+                raise PngValidationError('bKGD index is outside PLTE or has the wrong color representation')
+        else:
+            count = 1 if header.color_type in (PngColorType.GRAYSCALE, PngColorType.GRAYSCALE_ALPHA) else 3
+            if background.color is None or len(background.color) != count:
+                raise PngValidationError('bKGD has the wrong sample count for the color type')
+            if for_encoding and any(value >= 1 << header.bit_depth for value in background.color):
+                raise PngValidationError('bKGD sample exceeds the image bit depth')
+    if b'hIST' in parsed:
+        if not palette_size or len(parsed[b'hIST'].frequencies) != palette_size:
+            raise PngValidationError('hIST requires one two-byte entry per PLTE entry')
+    if b'sBIT' in parsed:
+        bits = parsed[b'sBIT'].bits
+        channels = 3 if header.color_type == PngColorType.INDEXED_COLOR else header.channels
+        maximum = 8 if header.color_type == PngColorType.INDEXED_COLOR else header.bit_depth
+        if len(bits) != channels or any(value > maximum for value in bits):
+            raise PngValidationError('sBIT sample depths must fit the color type and bit depth')
