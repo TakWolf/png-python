@@ -117,7 +117,7 @@ EXIF_FIELDS = {
     0xA404: ((5,), (1,)),
     0xA405: ((3,), (1,)),
     0xA406: ((3,), (1,)),
-    0xA407: ((5,), (1,)),
+    0xA407: ((3, 5), (1,)),
     0xA408: ((3,), (1,)),
     0xA409: ((3,), (1,)),
     0xA40A: ((3,), (1,)),
@@ -182,10 +182,8 @@ def validate_fields(profile: bytes, endian: str, role: str, fields: dict[int, tu
         if rule is None:
             continue
         kinds, counts = rule
-        # Exif 3.0 changed GainControl from SHORT to RATIONAL. Older or
-        # unspecified source versions must not be rejected using the new type.
-        if role == 'exif' and tag == 0xA407 and (not version or version < b'0300'):
-            kinds = (3, 5)
+        # DC-008-2024 Table 8 says RATIONAL for GainControl, whereas
+        # 4.6.6.7.41 says SHORT. Preserve both without inventing a version change.
         if kind not in kinds or (counts is not None and count not in counts):
             raise PngValidationError(f'Exif {role} field {tag:#06x} has an invalid type or count')
     if role == 'image':
@@ -231,3 +229,5 @@ def validate_fields(profile: bytes, endian: str, role: str, fields: dict[int, tu
         raise PngValidationError('Exif IFD requires a four-digit ExifVersion')
     if role == 'gps' and any(tag in GPS_FIELDS and tag != 0 for tag in fields) and 0 not in fields:
         raise PngValidationError('Exif GPS fields require GPSVersionID')
+    from png._exif_values import validate_values
+    validate_values(profile, endian, role, fields)

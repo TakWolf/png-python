@@ -129,13 +129,14 @@ def test_ifd_namespaces_do_not_confuse_gps_and_interoperability():
 
 
 def test_exif_legacy_gain_control_and_current_version_types():
-    for version, kind, value in [(b'0232', 3, b'\0\1\0\0'), (b'0300', 5, pack('>I', 56))]:
+    for version, kind, value in [(b'0232', 3, b'\0\1\0\0'), (b'0300', 3, b'\0\1\0\0'),
+                                  (b'0300', 5, pack('>I', 56))]:
         data = _child_ifd(0x8769, [(0x9000, 7, 4, version), (0xA407, kind, 1, value)])
         if kind == 5:
             data += pack('>II', 1, 1)
         PngExif(data).validate_profile_tags()
     with pytest.raises(PngValidationError, match='type or count'):
-        PngExif(_child_ifd(0x8769, [(0x9000, 7, 4, b'0300'), (0xA407, 3, 1, b'\0\1\0\0')])).validate_profile_tags()
+        PngExif(_child_ifd(0x8769, [(0x9000, 7, 4, b'0300'), (0xA407, 4, 1, b'\0\0\0\1')])).validate_profile_tags()
 
 
 @pytest.mark.parametrize('pointer,entries', [
