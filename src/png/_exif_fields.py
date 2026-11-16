@@ -176,7 +176,7 @@ def validate_fields(profile: bytes, endian: str, role: str, fields: dict[int, tu
     version = b''
     if role == 'exif' and 0x9000 in fields:
         _, _, start = fields[0x9000]
-        version = profile[start:start + 4]
+        version = profile[start : start + 4]
     for tag, (kind, count, start) in fields.items():
         rule = rules.get(tag)
         if rule is None:
@@ -187,8 +187,15 @@ def validate_fields(profile: bytes, endian: str, role: str, fields: dict[int, tu
         if kind not in kinds or (counts is not None and count not in counts):
             raise PngValidationError(f'Exif {role} field {tag:#06x} has an invalid type or count')
     if role == 'image':
-        short_values = {0x0103: (1, 6), 0x0106: (2, 6), 0x0112: tuple(range(1, 9)),
-                        0x0115: (3,), 0x011C: (1, 2), 0x0128: (2, 3), 0x0213: (1, 2)}
+        short_values = {
+            0x0103: (1, 6),
+            0x0106: (2, 6),
+            0x0112: tuple(range(1, 9)),
+            0x0115: (3,),
+            0x011C: (1, 2),
+            0x0128: (2, 3),
+            0x0213: (1, 2),
+        }
         for tag, allowed in short_values.items():
             if tag in fields and unpack_from(endian + 'H', profile, fields[tag][2])[0] not in allowed:
                 raise PngValidationError(f'Exif {role} field {tag:#06x} has a reserved value')
@@ -197,8 +204,19 @@ def validate_fields(profile: bytes, endian: str, role: str, fields: dict[int, tu
         if 0x0212 in fields and unpack_from(endian + '2H', profile, fields[0x0212][2]) not in ((2, 1), (2, 2)):
             raise PngValidationError('Exif YCbCrSubSampling uses a reserved value')
     if role == 'gps':
-        ascii_values = {1: b'NS', 3: b'EW', 9: b'AV', 10: b'23', 12: b'KMN',
-                        14: b'TM', 16: b'TM', 19: b'NS', 21: b'EW', 23: b'TM', 25: b'KMN'}
+        ascii_values = {
+            1: b'NS',
+            3: b'EW',
+            9: b'AV',
+            10: b'23',
+            12: b'KMN',
+            14: b'TM',
+            16: b'TM',
+            19: b'NS',
+            21: b'EW',
+            23: b'TM',
+            25: b'KMN',
+        }
         for tag, allowed in ascii_values.items():
             if tag in fields and profile[fields[tag][2]] not in allowed:
                 raise PngValidationError(f'Exif GPS field {tag:#06x} has a reserved reference value')
@@ -206,10 +224,11 @@ def validate_fields(profile: bytes, endian: str, role: str, fields: dict[int, tu
             raise PngValidationError('Exif GPSDifferential must be zero or one')
     if role == 'exif':
         from png._exif_binary import validate_binary
+
         for tag in (0x8828, 0xA20C, 0xA302, 0xA40B, 0xA462, 0x9286):
             if tag in fields:
                 _, size, start = fields[tag]
-                validate_binary(tag, profile[start:start + size], endian, version)
+                validate_binary(tag, profile[start : start + size], endian, version)
         for tag in (0x8831, 0x8832, 0x8833):
             if tag in fields and not {0x8827, 0x8830}.issubset(fields):
                 raise PngValidationError('Exif sensitivity values require PhotographicSensitivity and SensitivityType')
@@ -230,4 +249,5 @@ def validate_fields(profile: bytes, endian: str, role: str, fields: dict[int, tu
     if role == 'gps' and any(tag in GPS_FIELDS and tag != 0 for tag in fields) and 0 not in fields:
         raise PngValidationError('Exif GPS fields require GPSVersionID')
     from png._exif_values import validate_values
+
     validate_values(profile, endian, role, fields)

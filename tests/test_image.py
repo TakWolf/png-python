@@ -7,8 +7,16 @@ import zlib
 import pytest
 
 from png import (
-    PngAnimation, PngChunk, PngColorType, PngDocument, PngFilterType, PngHeader,
-    PngImage, PngInterlaceMethod, PngParseError, PngValidationError,
+    PngAnimation,
+    PngChunk,
+    PngColorType,
+    PngDocument,
+    PngFilterType,
+    PngHeader,
+    PngImage,
+    PngInterlaceMethod,
+    PngParseError,
+    PngValidationError,
 )
 
 _SUITE_DIR = Path(__file__).parents[1].joinpath('assets', 'png-suite')
@@ -53,14 +61,17 @@ def test_pngsuite_independent_filter_pairs(png_suite_dir: Path, suffix: str, kin
 @pytest.mark.parametrize('interlace', list(PngInterlaceMethod))
 @pytest.mark.parametrize('dimensions', [(1, 1), (2, 3), (9, 5)])
 def test_encoding_formats_filters_and_small_passes(
-        png_suite_dir: Path, name: str, kind: PngFilterType,
-        interlace: PngInterlaceMethod, dimensions: tuple[int, int],
+    png_suite_dir: Path,
+    name: str,
+    kind: PngFilterType,
+    interlace: PngInterlaceMethod,
+    dimensions: tuple[int, int],
 ) -> None:
     source = PngImage.load(png_suite_dir.joinpath(name))
     width, height = dimensions
     source.header.dimensions = dimensions
     source.header.interlace_method = interlace
-    source.bitmap = [row[:width * source.header.channels] for row in source.bitmap[:height]]
+    source.bitmap = [row[: width * source.header.channels] for row in source.bitmap[:height]]
     encoded = source.dump_to_bytes(filter_type=kind, idat_chunk_size=7)
     restored = PngImage.parse(encoded)
     assert restored.bitmap == source.bitmap
@@ -131,7 +142,7 @@ def test_idat_boundaries_and_allowed_trailing_bytes(png_suite_dir: Path) -> None
     compressed = b''.join(chunk.data for chunk in document.find_chunks(b'IDAT')) + b'\0\0'
     document = _replace_idat(document, compressed)
     position = next(index for index, chunk in enumerate(document.chunks) if chunk.type == b'IDAT')
-    document.chunks[position:position + 1] = (
+    document.chunks[position : position + 1] = (
         [PngChunk(b'IDAT')] + [PngChunk(b'IDAT', bytes([value])) for value in compressed] + [PngChunk(b'IDAT')]
     )
     assert PngImage.parse(document.dump_to_bytes()).bitmap == original.bitmap
@@ -177,11 +188,14 @@ def test_exact_16_bit_sample_byte_order(png_suite_dir: Path) -> None:
     assert zlib.decompress(b''.join(chunk.data for chunk in encoded.find_chunks(b'IDAT'))) == raw
 
 
-@pytest.mark.parametrize(('depth', 'samples', 'packed'), [
-    (1, [1, 0, 1, 1, 0, 0, 0, 1, 1], b'\xb1\x80'),
-    (2, [0, 1, 2, 3, 1], b'\x1b\x40'),
-    (4, [1, 15, 8], b'\x1f\x80'),
-])
+@pytest.mark.parametrize(
+    ('depth', 'samples', 'packed'),
+    [
+        (1, [1, 0, 1, 1, 0, 0, 0, 1, 1], b'\xb1\x80'),
+        (2, [0, 1, 2, 3, 1], b'\x1b\x40'),
+        (4, [1, 15, 8], b'\x1f\x80'),
+    ],
+)
 def test_exact_subbyte_sample_packing(depth: int, samples: list[int], packed: bytes) -> None:
     image = PngImage(PngHeader((len(samples), 1), depth, PngColorType.GRAYSCALE), [samples])
     document = image.to_document(filter_type=PngFilterType.NONE)
@@ -228,9 +242,12 @@ def test_ancillary_copy_policy_and_positions(png_suite_dir: Path) -> None:
 
 def test_new_image_metadata_is_explicit() -> None:
     image = PngImage(
-        PngHeader((1, 1), color_type=PngColorType.INDEXED_COLOR, bit_depth=1), [[0]],
-        palette=[(0, 0, 0)], ancillary_chunks=[
-            PngChunk(b'bKGD', b'\0'), PngChunk(b'gAMA', pack('>I', 45455)),
+        PngHeader((1, 1), color_type=PngColorType.INDEXED_COLOR, bit_depth=1),
+        [[0]],
+        palette=[(0, 0, 0)],
+        ancillary_chunks=[
+            PngChunk(b'bKGD', b'\0'),
+            PngChunk(b'gAMA', pack('>I', 45455)),
         ],
     )
     encoded = image.to_document()
@@ -248,10 +265,15 @@ def test_incomplete_apng_is_rejected(png_suite_dir: Path) -> None:
         image.to_document()
 
 
-@pytest.mark.parametrize(('options', 'field'), [
-    ({'filter_type': 5}, 'filter type'), ({'filter_type': True}, 'filter type'),
-    ({'compression_level': 10}, 'compression level'), ({'idat_chunk_size': 0}, 'chunk size'),
-])
+@pytest.mark.parametrize(
+    ('options', 'field'),
+    [
+        ({'filter_type': 5}, 'filter type'),
+        ({'filter_type': True}, 'filter type'),
+        ({'compression_level': 10}, 'compression level'),
+        ({'idat_chunk_size': 0}, 'chunk size'),
+    ],
+)
 def test_invalid_encoder_options(options, field: str) -> None:
     image = PngImage(PngHeader((1, 1)), [[0] * 4])
     with pytest.raises(PngValidationError, match=field):

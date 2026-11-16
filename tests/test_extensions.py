@@ -5,20 +5,35 @@ from pathlib import Path
 import pytest
 
 from png import (
-    PngCalibration, PngCalibrationEquation, PngChunk, PngDocument, PngGifApplication,
-    PngGifGraphicControl, PngImage, PngMetadata, PngOffset, PngOffsetUnit, PngParseError,
-    PngPhysicalScale, PngScaleUnit, PngStereo, PngStereoMode, PngValidationError,
+    PngCalibration,
+    PngCalibrationEquation,
+    PngChunk,
+    PngDocument,
+    PngGifApplication,
+    PngGifGraphicControl,
+    PngImage,
+    PngMetadata,
+    PngOffset,
+    PngOffsetUnit,
+    PngParseError,
+    PngPhysicalScale,
+    PngScaleUnit,
+    PngStereo,
+    PngStereoMode,
+    PngValidationError,
 )
 
 
 VECTORS = [
-    (PngOffset((-2147483648, 2147483647), PngOffsetUnit.MICROMETRE),
-     bytes.fromhex('800000007fffffff01')),
-    (PngCalibration('SI', -1, 255, parameters=['-1.25', '+2E3']),
-     b'SI\0' + bytes.fromhex('ffffffff000000ff0002') + b'\0-1.25\0+2E3'),
-    (PngCalibration('Reverse', 10, -10, PngCalibrationEquation.HYPERBOLIC, ' K  ',
-                    ['0', '1e-30', '280', '32767']),
-     b'Reverse\0' + bytes.fromhex('0000000afffffff60304') + b' K  \x000\x001e-30\x00280\x0032767'),
+    (PngOffset((-2147483648, 2147483647), PngOffsetUnit.MICROMETRE), bytes.fromhex('800000007fffffff01')),
+    (
+        PngCalibration('SI', -1, 255, parameters=['-1.25', '+2E3']),
+        b'SI\0' + bytes.fromhex('ffffffff000000ff0002') + b'\0-1.25\0+2E3',
+    ),
+    (
+        PngCalibration('Reverse', 10, -10, PngCalibrationEquation.HYPERBOLIC, ' K  ', ['0', '1e-30', '280', '32767']),
+        b'Reverse\0' + bytes.fromhex('0000000afffffff60304') + b' K  \x000\x001e-30\x00280\x0032767',
+    ),
     (PngPhysicalScale('+1.25e-9', '.5', PngScaleUnit.RADIAN), b'\x02+1.25e-9\0.5'),
     (PngGifGraphicControl(3, 1, 258), bytes.fromhex('03010102')),
     (PngGifApplication('NETSCAPE', b'2.0', bytes.fromhex('010000')), b'NETSCAPE2.0\x01\0\0'),
@@ -54,8 +69,7 @@ def test_public_fields_and_derived_values() -> None:
 
 @pytest.mark.parametrize(('equation', 'count'), [(0, 2), (1, 3), (2, 3), (3, 4)])
 def test_calibration_equation_counts(equation: int, count: int) -> None:
-    calibration = PngCalibration('Calibration', 2147483647, -2147483648, equation,
-                                 ' µm  ', ['1.'] * count)
+    calibration = PngCalibration('Calibration', 2147483647, -2147483648, equation, ' µm  ', ['1.'] * count)
     restored = PngCalibration.from_chunk(calibration.to_chunk())
     assert restored.original_zero > restored.original_max
     assert restored.equation_type == PngCalibrationEquation(equation)
@@ -78,8 +92,10 @@ def test_physical_scale_preserves_precision_and_unbounded_exponents(number: str)
     assert (restored.pixel_width, restored.pixel_height) == (number, number)
 
 
-@pytest.mark.parametrize('number', ['', '.', '+', '1e', '1e+', '1 2', ' 1', '1\n', 'NaN', 'inf',
-                                    '1_000', '1,2', '1f', '\u0661', '0x10', '1\0'])
+@pytest.mark.parametrize(
+    'number',
+    ['', '.', '+', '1e', '1e+', '1 2', ' 1', '1\n', 'NaN', 'inf', '1_000', '1,2', '1f', '\u0661', '0x10', '1\0'],
+)
 def test_invalid_decimal_grammar(number: str) -> None:
     with pytest.raises(PngValidationError):
         PngCalibration('Test', 0, 1, parameters=[number, '0']).validate()
@@ -93,44 +109,61 @@ def test_physical_scale_requires_positive_values(number: str) -> None:
         PngPhysicalScale('1', number).validate()
 
 
-@pytest.mark.parametrize(('cls', 'kind', 'payload'), [
-    (PngOffset, b'oFFs', bytes(8)), (PngOffset, b'oFFs', bytes(10)),
-    (PngOffset, b'oFFs', bytes(8) + b'\x02'),
-    (PngCalibration, b'pCAL', b'Name'), (PngCalibration, b'pCAL', b'Name\0' + bytes(9)),
-    (PngCalibration, b'pCAL', b'N\0' + bytes.fromhex('00000000000000010002') + b'\x000'),
-    (PngCalibration, b'pCAL', b'N\0' + bytes.fromhex('00000000000000010002') + b'\x000\x001\0'),
-    (PngCalibration, b'pCAL', b'N\0' + bytes.fromhex('00000000000000010402') + b'\x000\x001'),
-    (PngPhysicalScale, b'sCAL', b''), (PngPhysicalScale, b'sCAL', b'\x011'),
-    (PngPhysicalScale, b'sCAL', b'\x001\x001'),
-    (PngPhysicalScale, b'sCAL', b'\x011\x001\0'),
-    (PngPhysicalScale, b'sCAL', b'\x01\xff\x001'),
-    (PngGifGraphicControl, b'gIFg', bytes(3)),
-    (PngGifGraphicControl, b'gIFg', b'\x08' + bytes(3)),
-    (PngGifGraphicControl, b'gIFg', b'\x00\x02\0\0'),
-    (PngGifApplication, b'gIFx', bytes(10)),
-    (PngGifApplication, b'gIFx', b'\x7f' + b'A' * 10),
-    (PngGifApplication, b'gIFx', b'\xff' + b'A' * 10),
-    (PngStereo, b'sTER', b''), (PngStereo, b'sTER', b'\0\0'), (PngStereo, b'sTER', b'\x02'),
-])
+@pytest.mark.parametrize(
+    ('cls', 'kind', 'payload'),
+    [
+        (PngOffset, b'oFFs', bytes(8)),
+        (PngOffset, b'oFFs', bytes(10)),
+        (PngOffset, b'oFFs', bytes(8) + b'\x02'),
+        (PngCalibration, b'pCAL', b'Name'),
+        (PngCalibration, b'pCAL', b'Name\0' + bytes(9)),
+        (PngCalibration, b'pCAL', b'N\0' + bytes.fromhex('00000000000000010002') + b'\x000'),
+        (PngCalibration, b'pCAL', b'N\0' + bytes.fromhex('00000000000000010002') + b'\x000\x001\0'),
+        (PngCalibration, b'pCAL', b'N\0' + bytes.fromhex('00000000000000010402') + b'\x000\x001'),
+        (PngPhysicalScale, b'sCAL', b''),
+        (PngPhysicalScale, b'sCAL', b'\x011'),
+        (PngPhysicalScale, b'sCAL', b'\x001\x001'),
+        (PngPhysicalScale, b'sCAL', b'\x011\x001\0'),
+        (PngPhysicalScale, b'sCAL', b'\x01\xff\x001'),
+        (PngGifGraphicControl, b'gIFg', bytes(3)),
+        (PngGifGraphicControl, b'gIFg', b'\x08' + bytes(3)),
+        (PngGifGraphicControl, b'gIFg', b'\x00\x02\0\0'),
+        (PngGifApplication, b'gIFx', bytes(10)),
+        (PngGifApplication, b'gIFx', b'\x7f' + b'A' * 10),
+        (PngGifApplication, b'gIFx', b'\xff' + b'A' * 10),
+        (PngStereo, b'sTER', b''),
+        (PngStereo, b'sTER', b'\0\0'),
+        (PngStereo, b'sTER', b'\x02'),
+    ],
+)
 def test_invalid_wire_payloads(cls, kind: bytes, payload: bytes) -> None:
     with pytest.raises(PngValidationError):
         cls.from_chunk(PngChunk(kind, payload))
 
 
-@pytest.mark.parametrize('metadata', [
-    PngOffset((-2147483649, 0)), PngOffset((0, 2147483648)), PngOffset(unit=True),
-    PngCalibration('Bad  Name', 0, 1, parameters=['0', '1']),
-    PngCalibration('Test', 1, 1, parameters=['0', '1']),
-    PngCalibration('Test', 0, 1, unit_name='\x7f', parameters=['0', '1']),
-    PngCalibration('Test', 0, 1, unit_name='\xa0', parameters=['0', '1']),
-    PngCalibration('Test', 0, 1, parameters=[1, '1']),
-    PngPhysicalScale('1', '1', 3), PngPhysicalScale(1, '1'),
-    PngGifGraphicControl(-1), PngGifGraphicControl(delay_time=65536),
-    PngGifGraphicControl(user_input_flag=True),
-    PngGifApplication('SHORT', b'123'), PngGifApplication('LongName', b'12'),
-    PngGifApplication('LongName', bytearray(b'123')), PngGifApplication('LongName', b'123', 'text'),
-    PngStereo(2),
-])
+@pytest.mark.parametrize(
+    'metadata',
+    [
+        PngOffset((-2147483649, 0)),
+        PngOffset((0, 2147483648)),
+        PngOffset(unit=True),
+        PngCalibration('Bad  Name', 0, 1, parameters=['0', '1']),
+        PngCalibration('Test', 1, 1, parameters=['0', '1']),
+        PngCalibration('Test', 0, 1, unit_name='\x7f', parameters=['0', '1']),
+        PngCalibration('Test', 0, 1, unit_name='\xa0', parameters=['0', '1']),
+        PngCalibration('Test', 0, 1, parameters=[1, '1']),
+        PngPhysicalScale('1', '1', 3),
+        PngPhysicalScale(1, '1'),
+        PngGifGraphicControl(-1),
+        PngGifGraphicControl(delay_time=65536),
+        PngGifGraphicControl(user_input_flag=True),
+        PngGifApplication('SHORT', b'123'),
+        PngGifApplication('LongName', b'12'),
+        PngGifApplication('LongName', bytearray(b'123')),
+        PngGifApplication('LongName', b'123', 'text'),
+        PngStereo(2),
+    ],
+)
 def test_invalid_model_fields(metadata: PngMetadata) -> None:
     with pytest.raises(PngValidationError):
         metadata.validate()
@@ -160,14 +193,16 @@ def test_stereo_rejects_impossible_canvas_width(width: int) -> None:
 
 @pytest.mark.parametrize(('item', 'payload'), VECTORS)
 def test_extensions_survive_pixel_edits_on_official_image(
-        png_suite_dir: Path, item: PngMetadata, payload: bytes,
+    png_suite_dir: Path,
+    item: PngMetadata,
+    payload: bytes,
 ) -> None:
     image = PngImage.load(png_suite_dir.joinpath('basn2c08.png'))
     image.metadata.append(deepcopy(item))
     document = image.to_document(idat_chunk_size=1)
     restored = PngImage.from_document(document)
     assert restored.ancillary_chunks == []
-    actual, = restored.find_metadata(item.type)
+    (actual,) = restored.find_metadata(item.type)
     assert isinstance(actual, type(item))
     assert actual.to_chunk().data == payload
     restored.bitmap[0][0] ^= 255
@@ -177,8 +212,9 @@ def test_extensions_survive_pixel_edits_on_official_image(
     assert output.animation is None
 
 
-@pytest.mark.parametrize('item', [PngOffset(), PngCalibration('Test', 0, 1, parameters=['0', '1']),
-                                 PngPhysicalScale('1', '2'), PngStereo()])
+@pytest.mark.parametrize(
+    'item', [PngOffset(), PngCalibration('Test', 0, 1, parameters=['0', '1']), PngPhysicalScale('1', '2'), PngStereo()]
+)
 def test_singletons_and_ordering(png_suite_dir: Path, item: PngMetadata) -> None:
     document = PngDocument.load(png_suite_dir.joinpath('basn2c08.png'))
     document.chunks.insert(-1, item.to_chunk())
@@ -196,17 +232,23 @@ def test_singletons_and_ordering(png_suite_dir: Path, item: PngMetadata) -> None
 
 def test_gif_repeated_metadata_keeps_its_side_of_idat(png_suite_dir: Path) -> None:
     document = PngDocument.load(png_suite_dir.joinpath('basn2c08.png'))
-    items = [PngGifGraphicControl(1, 0, 1), PngGifApplication('NETSCAPE', b'2.0'),
-             PngGifGraphicControl(2, 1, 2), PngGifApplication('NETSCAPE', b'2.0', b'abc')]
+    items = [
+        PngGifGraphicControl(1, 0, 1),
+        PngGifApplication('NETSCAPE', b'2.0'),
+        PngGifGraphicControl(2, 1, 2),
+        PngGifApplication('NETSCAPE', b'2.0', b'abc'),
+    ]
     document.chunks[1:1] = [item.to_chunk() for item in items[:2]]
     document.chunks[-1:-1] = [item.to_chunk() for item in items[2:]]
     restored = PngImage.from_document(PngDocument.parse(document.dump_to_bytes())).to_document()
     kinds = [chunk.type for chunk in restored.chunks]
     first_data = kinds.index(b'IDAT')
     assert [chunk.data for chunk in restored.chunks[:first_data] if chunk.type in (b'gIFg', b'gIFx')] == [
-        item.to_chunk().data for item in items[:2]]
+        item.to_chunk().data for item in items[:2]
+    ]
     assert [chunk.data for chunk in restored.chunks[first_data:] if chunk.type in (b'gIFg', b'gIFx')] == [
-        item.to_chunk().data for item in items[2:]]
+        item.to_chunk().data for item in items[2:]
+    ]
 
 
 def test_stereo_checks_parent_dimensions(png_suite_dir: Path) -> None:

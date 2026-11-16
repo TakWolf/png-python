@@ -20,13 +20,13 @@ class PngHeader:
     interlace_method: PngInterlaceMethod
 
     def __init__(
-            self,
-            dimensions: tuple[int, int],
-            bit_depth: int = 8,
-            color_type: PngColorType = PngColorType.TRUECOLOR_ALPHA,
-            compression_method: PngCompressionMethod = PngCompressionMethod.DEFLATE,
-            filter_method: PngFilterMethod = PngFilterMethod.ADAPTIVE,
-            interlace_method: PngInterlaceMethod = PngInterlaceMethod.NONE,
+        self,
+        dimensions: tuple[int, int],
+        bit_depth: int = 8,
+        color_type: PngColorType = PngColorType.TRUECOLOR_ALPHA,
+        compression_method: PngCompressionMethod = PngCompressionMethod.DEFLATE,
+        filter_method: PngFilterMethod = PngFilterMethod.ADAPTIVE,
+        interlace_method: PngInterlaceMethod = PngInterlaceMethod.NONE,
     ) -> None:
         self.width, self.height = dimensions
         self.bit_depth = bit_depth
@@ -68,9 +68,9 @@ class PngHeader:
         if self.bit_depth not in color_type.bit_depths:
             raise PngValidationError(f'bit depth {self.bit_depth} is invalid for {color_type.name}')
         for name, value, enum in (
-                ('compression method', self.compression_method, PngCompressionMethod),
-                ('filter method', self.filter_method, PngFilterMethod),
-                ('interlace method', self.interlace_method, PngInterlaceMethod),
+            ('compression method', self.compression_method, PngCompressionMethod),
+            ('filter method', self.filter_method, PngFilterMethod),
+            ('interlace method', self.interlace_method, PngInterlaceMethod),
         ):
             check_integer(name, value, 0, 255)
             try:
@@ -94,7 +94,16 @@ class PngHeader:
 
     def to_chunk(self) -> PngChunk:
         self.validate()
-        return PngChunk(b'IHDR', pack(
-            '>IIBBBBB', self.width, self.height, self.bit_depth, self.color_type,
-            self.compression_method, self.filter_method, self.interlace_method,
-        ))
+        return PngChunk(
+            b'IHDR',
+            pack(
+                '>IIBBBBB',
+                self.width,
+                self.height,
+                self.bit_depth,
+                self.color_type,
+                self.compression_method,
+                self.filter_method,
+                self.interlace_method,
+            ),
+        )

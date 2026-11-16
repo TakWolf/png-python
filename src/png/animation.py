@@ -26,13 +26,13 @@ class PngFrameControl:
     blend_op: PngBlendOp
 
     def __init__(
-            self,
-            dimensions: tuple[int, int],
-            offset: tuple[int, int] = (0, 0),
-            delay_num: int = 1,
-            delay_den: int = 10,
-            dispose_op: PngDisposeOp = PngDisposeOp.NONE,
-            blend_op: PngBlendOp = PngBlendOp.SOURCE,
+        self,
+        dimensions: tuple[int, int],
+        offset: tuple[int, int] = (0, 0),
+        delay_num: int = 1,
+        delay_den: int = 10,
+        dispose_op: PngDisposeOp = PngDisposeOp.NONE,
+        blend_op: PngBlendOp = PngBlendOp.SOURCE,
     ) -> None:
         self.width, self.height = dimensions
         self.offset_x, self.offset_y = offset
@@ -77,10 +77,21 @@ class PngFrameControl:
     def to_chunk(self, sequence_number: int) -> PngChunk:
         check_integer('sequence number', sequence_number, 0, 0x7FFFFFFF)
         self.validate((self.width + self.offset_x, self.height + self.offset_y))
-        return PngChunk(b'fcTL', pack(
-            '>IIIIIHHBB', sequence_number, self.width, self.height, self.offset_x, self.offset_y,
-            self.delay_num, self.delay_den, self.dispose_op, self.blend_op,
-        ))
+        return PngChunk(
+            b'fcTL',
+            pack(
+                '>IIIIIHHBB',
+                sequence_number,
+                self.width,
+                self.height,
+                self.offset_x,
+                self.offset_y,
+                self.delay_num,
+                self.delay_den,
+                self.dispose_op,
+                self.blend_op,
+            ),
+        )
 
     def validate(self, canvas: tuple[int, int]) -> None:
         for name, value in (('frame width', self.width), ('frame height', self.height)):
@@ -92,8 +103,8 @@ class PngFrameControl:
         check_integer('delay numerator', self.delay_num, 0, 65535)
         check_integer('delay denominator', self.delay_den, 0, 65535)
         for name, value, enum in (
-                ('dispose operation', self.dispose_op, PngDisposeOp),
-                ('blend operation', self.blend_op, PngBlendOp),
+            ('dispose operation', self.dispose_op, PngDisposeOp),
+            ('blend operation', self.blend_op, PngBlendOp),
         ):
             check_integer(name, value, 0, 255)
             try:
@@ -126,10 +137,10 @@ class PngAnimation:
     frames: list[PngFrame]
 
     def __init__(
-            self,
-            frames: list[PngFrame] | None = None,
-            num_plays: int = 0,
-            default_image_control: PngFrameControl | None = None,
+        self,
+        frames: list[PngFrame] | None = None,
+        num_plays: int = 0,
+        default_image_control: PngFrameControl | None = None,
     ) -> None:
         self.frames = frames if frames is not None else []
         self.num_plays = num_plays
@@ -144,8 +155,7 @@ class PngAnimation:
         check_integer('number of frames', self.num_frames, 1, 0x7FFFFFFF)
         if self.default_image_control is not None:
             self.default_image_control.validate(canvas)
-            if (self.default_image_control.dimensions != canvas or
-                    self.default_image_control.offset != (0, 0)):
+            if self.default_image_control.dimensions != canvas or self.default_image_control.offset != (0, 0):
                 raise PngValidationError('the default frame must cover the entire canvas at offset (0, 0)')
         for frame in self.frames:
             frame.control.validate(canvas)

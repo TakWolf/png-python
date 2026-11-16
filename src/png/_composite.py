@@ -21,7 +21,7 @@ def _rgba_rows(image: 'PngImage', bitmap: list[list[int]], depth: int) -> list[l
     for row in bitmap:
         output = []
         for index in range(0, len(row), channels):
-            samples = tuple(row[index:index + channels])
+            samples = tuple(row[index : index + channels])
             kind = image.header.color_type
             if kind == PngColorType.INDEXED_COLOR:
                 palette_index = samples[0]
@@ -56,9 +56,11 @@ def render_frames(image: 'PngImage') -> Iterator[PngRenderedFrame]:
 
     def snapshot(bitmap: list[list[int]]) -> PngImage:
         return PngImage(
-            PngHeader(image.dimensions, depth), bitmap,
-            ancillary_chunks=[PngChunk(chunk.type, chunk.data) for chunk in image.ancillary_chunks
-                              if chunk.type in metadata_types],
+            PngHeader(image.dimensions, depth),
+            bitmap,
+            ancillary_chunks=[
+                PngChunk(chunk.type, chunk.data) for chunk in image.ancillary_chunks if chunk.type in metadata_types
+            ],
             metadata=[deepcopy(item) for item in image.metadata if item.type in metadata_types],
         )
 
@@ -77,20 +79,21 @@ def render_frames(image: 'PngImage') -> Iterator[PngRenderedFrame]:
             disposal = PngDisposeOp.BACKGROUND
         previous = []
         if disposal == PngDisposeOp.PREVIOUS:
-            previous = [canvas[y][start:end]
-                        for y in range(control.offset_y, control.offset_y + control.height)]
+            previous = [canvas[y][start:end] for y in range(control.offset_y, control.offset_y + control.height)]
         for row_index, source in enumerate(rows):
             target = canvas[control.offset_y + row_index]
             for index in range(0, len(source), 4):
                 position = start + index
-                red, green, blue, alpha = source[index:index + 4]
+                red, green, blue, alpha = source[index : index + 4]
                 if control.blend_op == PngBlendOp.SOURCE:
-                    target[position:position + 4] = [red, green, blue, alpha]
+                    target[position : position + 4] = [red, green, blue, alpha]
                 elif alpha:
                     destination_alpha = target[position + 3]
                     alpha_numerator = alpha * maximum + destination_alpha * (maximum - alpha)
                     for channel, value in enumerate((red, green, blue)):
-                        numerator = value * alpha * maximum + target[position + channel] * destination_alpha * (maximum - alpha)
+                        numerator = value * alpha * maximum + target[position + channel] * destination_alpha * (
+                            maximum - alpha
+                        )
                         target[position + channel] = (numerator + alpha_numerator // 2) // alpha_numerator
                     target[position + 3] = (alpha_numerator + maximum // 2) // maximum
         yield PngRenderedFrame(snapshot([row.copy() for row in canvas]), control.delay)

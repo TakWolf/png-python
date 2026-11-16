@@ -37,8 +37,10 @@ class PngChunk:
 
     @staticmethod
     def _parse(
-            stream: BinaryIO, budget: ReadBudget,
-            *, check_header: Callable[[bytes, int], None] | None = None,
+        stream: BinaryIO,
+        budget: ReadBudget,
+        *,
+        check_header: Callable[[bytes, int], None] | None = None,
     ) -> PngChunk:
         budget.start_chunk()
         length, chunk_type = unpack('>I4s', read_exact(stream, 8))
@@ -53,7 +55,7 @@ class PngChunk:
             check_header(chunk_type, length)
         budget.chunk(length)
         chunk.data = read_exact(stream, length)
-        expected, = unpack('>I', read_exact(stream, 4))
+        (expected,) = unpack('>I', read_exact(stream, 4))
         actual = chunk.crc
         if actual != expected:
             raise PngCrcError(chunk.type, expected, actual)
@@ -88,8 +90,11 @@ class PngChunk:
         return bool(self.type[3] & 0x20)
 
     def validate(self) -> None:
-        if (not isinstance(self.type, bytes) or len(self.type) != 4 or
-                any(not (65 <= value <= 90 or 97 <= value <= 122) for value in self.type)):
+        if (
+            not isinstance(self.type, bytes)
+            or len(self.type) != 4
+            or any(not (65 <= value <= 90 or 97 <= value <= 122) for value in self.type)
+        ):
             raise PngValidationError('chunk type must contain four ASCII letters')
         if not isinstance(self.data, bytes):
             raise PngValidationError('chunk data must be bytes')

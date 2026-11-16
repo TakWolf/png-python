@@ -9,8 +9,11 @@ from png._icc_lut import LUT_TYPES, _channels, curve_end, validate_lut, validate
 from png._icc_mpet import MPET_TAGS, validate_mpet, validate_mpet_context
 from png._icc_misc import MISC_TYPES, V4_TAG_TYPES, validate_misc, validate_misc_context
 from png._icc_records import (
-    validate_colorant_context, validate_colorant_table, validate_named_colors,
-    validate_profile_identifiers, validate_profile_sequence,
+    validate_colorant_context,
+    validate_colorant_table,
+    validate_named_colors,
+    validate_profile_identifiers,
+    validate_profile_sequence,
 )
 from png._icc_text import ascii_terminated, description_end, multilingual_end
 from png.error import PngUnsupportedError, PngValidationError
@@ -21,10 +24,10 @@ def validate_icc_structure(profile: bytes) -> None:
         raise PngValidationError('ICC profile requires a header and tag count')
     if profile[36:40] != b'acsp':
         raise PngValidationError('ICC profile requires the acsp header signature')
-    declared, = unpack_from('>I', profile)
+    (declared,) = unpack_from('>I', profile)
     if declared != len(profile):
         raise PngValidationError(f'ICC declared size {declared} does not match {len(profile)} payload bytes')
-    count, = unpack_from('>I', profile, 128)
+    (count,) = unpack_from('>I', profile, 128)
     table_end = 132 + count * 12
     if table_end > len(profile):
         raise PngValidationError('ICC tag table exceeds the profile')
@@ -39,7 +42,7 @@ def validate_icc_structure(profile: bytes) -> None:
             raise PngValidationError('ICC tag offset must be aligned and follow the tag table')
         if size < 8 or offset + size > len(profile):
             raise PngValidationError('ICC tag data exceeds the profile or lacks its type header')
-        if profile[offset + 4:offset + 8] != bytes(4):
+        if profile[offset + 4 : offset + 8] != bytes(4):
             raise PngValidationError('ICC tag type reserved bytes must be zero')
         ranges.add((offset, offset + size))
     previous_end = table_end
@@ -71,13 +74,13 @@ def validate_icc_tags(profile: bytes) -> None:
     if profile_class not in (b'scnr', b'mntr', b'prtr', b'link', b'spac', b'abst', b'nmcl'):
         raise PngValidationError('ICC profile class is not recognized')
     validate_header_fields(profile)
-    count, = unpack_from('>I', profile, 128)
+    (count,) = unpack_from('>I', profile, 128)
     tags = {}
     offsets = {}
     checked = set()
     for index in range(count):
         signature, offset, size = unpack_from('>4sII', profile, 132 + index * 12)
-        kind = profile[offset:offset + 4]
+        kind = profile[offset : offset + 4]
         tags[signature] = kind
         offsets[signature] = offset
         allowed = None
@@ -117,16 +120,16 @@ def validate_icc_tags(profile: bytes) -> None:
             raise PngValidationError(f'ICC {signature!r} has an invalid tag type {kind!r}')
         extent = (offset, size)
         if extent not in checked:
-            _validate_icc_tag_data(profile[offset:offset + size])
+            _validate_icc_tag_data(profile[offset : offset + size])
             checked.add(extent)
         if kind in LUT_TYPES:
-            validate_lut_context(profile, signature, memoryview(profile)[offset:offset + size])
+            validate_lut_context(profile, signature, memoryview(profile)[offset : offset + size])
         elif kind == b'mpet':
-            validate_mpet_context(profile, signature, memoryview(profile)[offset:offset + size])
+            validate_mpet_context(profile, signature, memoryview(profile)[offset : offset + size])
         elif version == 4 and kind == b'clrt':
-            validate_colorant_context(profile, signature, memoryview(profile)[offset:offset + size])
+            validate_colorant_context(profile, signature, memoryview(profile)[offset : offset + size])
         if version == 4 and (kind in MISC_TYPES or signature == b'targ'):
-            validate_misc_context(profile, signature, memoryview(profile)[offset:offset + size])
+            validate_misc_context(profile, signature, memoryview(profile)[offset : offset + size])
         if version == 4 and signature == b'resp':
             if unpack_from('>H', profile, offset + 8)[0] != _channels(profile[16:20]):
                 raise PngValidationError('ICC response curve channels disagree with the device')
@@ -145,11 +148,10 @@ def validate_icc_tags(profile: bytes) -> None:
         elif version == 2 and profile_class == b'mntr':
             required.update(_ICC_MATRIX_TAGS)
             if profile[20:24] == b'Lab ' and not any(
-                    tag in tags for tag in (b'A2B0', b'A2B1', b'A2B2', b'B2A0', b'B2A1', b'B2A2')
+                tag in tags for tag in (b'A2B0', b'A2B1', b'A2B2', b'B2A0', b'B2A1', b'B2A2')
             ):
                 raise PngValidationError('ICC v2 Lab display requires an A2B or B2A LUT tag')
-        elif (_channels(profile[16:20]) == 3 and _ICC_MATRIX_TAGS.issubset(tags)
-              and profile[20:24] == b'XYZ '):
+        elif _channels(profile[16:20]) == 3 and _ICC_MATRIX_TAGS.issubset(tags) and profile[20:24] == b'XYZ ':
             pass  # The input/v4 display matrix model is an alternative to a LUT.
         else:
             required.add(b'A2B0')
@@ -166,7 +168,7 @@ def validate_icc_tags(profile: bytes) -> None:
     missing = required.difference(tags)
     if version == 4:
         if b'ciis' in tags:
-            state = profile[offsets[b'ciis'] + 8:offsets[b'ciis'] + 12]
+            state = profile[offsets[b'ciis'] + 8 : offsets[b'ciis'] + 12]
             if state not in (b'scoe', b'sape', b'fpce', b'rhoc', b'rpoc'):
                 raise PngValidationError('ICC colorimetric image state is reserved')
             missing.update({b'view'}.difference(tags))

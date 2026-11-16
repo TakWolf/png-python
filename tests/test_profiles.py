@@ -7,12 +7,17 @@ from struct import pack, unpack_from
 import pytest
 
 from png import (
-    PngDocument, PngExif, PngIccProfile, PngImage, PngUnsupportedError, PngValidationError,
+    PngDocument,
+    PngExif,
+    PngIccProfile,
+    PngImage,
+    PngUnsupportedError,
+    PngValidationError,
 )
 
 
 def _replace(data: bytes, offset: int, value: int, endian: str = '>') -> bytes:
-    return data[:offset] + pack(endian + 'I', value) + data[offset + 4:]
+    return data[:offset] + pack(endian + 'I', value) + data[offset + 4 :]
 
 
 def _icc(entries: list[tuple[bytes, int, int]], body: bytes, version: int = 4) -> bytes:
@@ -25,15 +30,23 @@ def _icc(entries: list[tuple[bytes, int, int]], body: bytes, version: int = 4) -
     return _replace(data, 0, len(data))
 
 
-def _tiff(entries: list[tuple[int, int, int, bytes]], *, endian: str = '>', following: int = 0, tail: bytes = b'') -> bytes:
+def _tiff(
+    entries: list[tuple[int, int, int, bytes]], *, endian: str = '>', following: int = 0, tail: bytes = b''
+) -> bytes:
     magic = b'MM\0*' if endian == '>' else b'II*\0'
-    return magic + pack(endian + 'IH', 8, len(entries)) + b''.join(
-        pack(endian + 'HHI', tag, kind, count) + value for tag, kind, count, value in entries
-    ) + pack(endian + 'I', following) + tail
+    return (
+        magic
+        + pack(endian + 'IH', 8, len(entries))
+        + b''.join(pack(endian + 'HHI', tag, kind, count) + value for tag, kind, count, value in entries)
+        + pack(endian + 'I', following)
+        + tail
+    )
 
 
 @pytest.mark.parametrize('name', ['sRGB2014.icc', 'sRGB_v4_ICC_preference.icc'])
-def test_official_icc_profiles_pass_and_embed_without_rewriting(assets_dir: Path, png_suite_dir: Path, name: str) -> None:
+def test_official_icc_profiles_pass_and_embed_without_rewriting(
+    assets_dir: Path, png_suite_dir: Path, name: str
+) -> None:
     original = assets_dir.joinpath('icc', name).read_bytes()
     metadata = PngIccProfile('Official ICC', original)
     metadata.validate_profile_structure()
@@ -54,12 +67,24 @@ def test_icc_asset_provenance_and_embedded_identification(assets_dir: Path) -> N
         assert len(data) == record['size']
         assert hashlib.sha256(data).hexdigest() == record['sha256']
         assert data[36:40] == b'acsp'
-        assert b'cprt' in data[132:132 + 12 * unpack_from('>I', data, 128)[0]]
+        assert b'cprt' in data[132 : 132 + 12 * unpack_from('>I', data, 128)[0]]
     assert 'International Color Consortium' in directory.joinpath('LICENSE.txt').read_text()
 
 
-@pytest.mark.parametrize('damage', ['truncated', 'declared', 'table_count', 'table_offset', 'alignment',
-                                    'tag_extent', 'short_type', 'duplicate_tag', 'reserved_type'])
+@pytest.mark.parametrize(
+    'damage',
+    [
+        'truncated',
+        'declared',
+        'table_count',
+        'table_offset',
+        'alignment',
+        'tag_extent',
+        'short_type',
+        'duplicate_tag',
+        'reserved_type',
+    ],
+)
 def test_invalid_icc_structure_fields_are_rejected(icc_profile_bytes: bytes, damage: str) -> None:
     data = icc_profile_bytes
     if damage == 'truncated':
@@ -79,8 +104,8 @@ def test_invalid_icc_structure_fields_are_rejected(icc_profile_bytes: bytes, dam
     elif damage == 'duplicate_tag':
         data = data[:144] + data[132:136] + data[148:]
     else:
-        offset, = unpack_from('>I', data, 136)
-        data = data[:offset + 4] + b'BAD!' + data[offset + 8:]
+        (offset,) = unpack_from('>I', data, 136)
+        data = data[: offset + 4] + b'BAD!' + data[offset + 8 :]
     # Envelope/header inspection can retain the original opaque payload.
     metadata = PngIccProfile('Inspect', data)
     assert PngIccProfile.from_chunk(metadata.to_chunk()).profile == data
@@ -113,16 +138,34 @@ def test_icc_v2_does_not_inherit_v4_only_contiguity_constraints() -> None:
 @pytest.mark.parametrize('endian', ['>', '<'])
 def test_tiff_inline_and_external_fields_use_the_profile_byte_order(endian: str) -> None:
     inline = pack(endian + 'H', 6) + bytes(2)
-    data = _tiff([(0x0112, 3, 1, inline), (0x011A, 5, 1, pack(endian + 'I', 38))],
-                 endian=endian, tail=pack(endian + 'II', 72, 1))
+    data = _tiff(
+        [(0x0112, 3, 1, inline), (0x011A, 5, 1, pack(endian + 'I', 38))], endian=endian, tail=pack(endian + 'II', 72, 1)
+    )
     metadata = PngExif(data)
     metadata.validate_profile_structure()
     assert PngExif.from_chunk(metadata.to_chunk()).profile == data
 
 
-@pytest.mark.parametrize('damage', ['header', 'zero_ifd', 'before_header', 'odd_ifd', 'outside_ifd',
-                                    'zero_count', 'table_count', 'next_pointer', 'cycle', 'external_extent',
-                                    'external_alignment', 'external_count', 'sub_ifd', 'sub_ifd_type', 'sub_ifd_cycle'])
+@pytest.mark.parametrize(
+    'damage',
+    [
+        'header',
+        'zero_ifd',
+        'before_header',
+        'odd_ifd',
+        'outside_ifd',
+        'zero_count',
+        'table_count',
+        'next_pointer',
+        'cycle',
+        'external_extent',
+        'external_alignment',
+        'external_count',
+        'sub_ifd',
+        'sub_ifd_type',
+        'sub_ifd_cycle',
+    ],
+)
 def test_invalid_tiff_directory_and_value_bounds_are_rejected(damage: str) -> None:
     data = _tiff([(0x011A, 5, 1, pack('>I', 26))], tail=pack('>II', 72, 1))
     if damage == 'header':
@@ -169,8 +212,10 @@ def test_ifd_entries_must_be_sorted_and_unique(tags: list[int]) -> None:
 
 
 def test_sub_ifd_sharing_and_opaque_maker_note_data() -> None:
-    data = _tiff([(0x8769, 4, 1, pack('>I', 38)), (0x8825, 4, 1, pack('>I', 38))],
-                 tail=pack('>HHHI4sI', 1, 0x0112, 3, 1, b'\0\x01\0\0', 0))
+    data = _tiff(
+        [(0x8769, 4, 1, pack('>I', 38)), (0x8825, 4, 1, pack('>I', 38))],
+        tail=pack('>HHHI4sI', 1, 0x0112, 3, 1, b'\0\x01\0\0', 0),
+    )
     PngExif(data).validate_profile_structure()
     private = _tiff([(0x927C, 7, 6, pack('>I', 26))], tail=b'\xff' * 6)
     PngExif(private).validate_profile_structure()  # Never interpret MakerNote contents as pointers.
@@ -202,8 +247,7 @@ def test_jpeg_thumbnail_extent_is_checked_without_decoding_jpeg(damage: str) -> 
     data = _tiff(entries, tail=b'\xff\xd8\xff\xd9')
     with pytest.raises(PngValidationError, match='Exif'):
         PngExif(data).validate_profile_structure()
-    valid = _tiff([(0x0201, 4, 1, pack('>I', 38)), (0x0202, 4, 1, pack('>I', 4))],
-                  tail=b'\xff\xd8\xff\xd9')
+    valid = _tiff([(0x0201, 4, 1, pack('>I', 38)), (0x0202, 4, 1, pack('>I', 4))], tail=b'\xff\xd8\xff\xd9')
     PngExif(valid).validate_profile_structure()
 
 
@@ -217,10 +261,16 @@ def test_unknown_tiff_field_type_is_preserved_but_structural_check_is_unsupporte
 
 @pytest.mark.parametrize('profile_kind', ['icc', 'exif', 'unsupported_exif'])
 def test_document_and_image_writers_reject_bad_profiles_without_writing_or_mutating(
-        png_suite_dir: Path, truncated_icc_profile_bytes: bytes, tmp_path: Path, profile_kind: str,
+    png_suite_dir: Path,
+    truncated_icc_profile_bytes: bytes,
+    tmp_path: Path,
+    profile_kind: str,
 ) -> None:
-    metadata = (PngIccProfile('Truncated', truncated_icc_profile_bytes) if profile_kind == 'icc' else
-                PngExif(_tiff([(0x0112, 3, 1, b'\0\x01\0\0')], following=8)))
+    metadata = (
+        PngIccProfile('Truncated', truncated_icc_profile_bytes)
+        if profile_kind == 'icc'
+        else PngExif(_tiff([(0x0112, 3, 1, b'\0\x01\0\0')], following=8))
+    )
     if profile_kind == 'unsupported_exif':
         metadata = PngExif(_tiff([(0xC001, 0xFFFF, 1, bytes(4))]))
     error_type = PngUnsupportedError if profile_kind == 'unsupported_exif' else PngValidationError
@@ -241,7 +291,7 @@ def test_document_and_image_writers_reject_bad_profiles_without_writing_or_mutat
         with pytest.raises(error_type):
             model.save(path)
         assert path.read_bytes() == b'original file'
-    retained, = image.find_metadata(metadata.type)
+    (retained,) = image.find_metadata(metadata.type)
     assert retained.profile == metadata.profile
     assert loaded.find_chunks(metadata.type)[0].data == metadata.to_chunk().data
     # Removing invalid metadata is an explicit caller action, after inspection.
@@ -251,7 +301,7 @@ def test_document_and_image_writers_reject_bad_profiles_without_writing_or_mutat
 
 def test_wpt_exif_structure_is_valid_and_payload_stays_exact(assets_dir: Path) -> None:
     image = PngImage.load(assets_dir.joinpath('wpt', 'png', 'support', 'exif-orientation-bottom-right.png'))
-    metadata, = image.find_metadata(b'eXIf')
+    (metadata,) = image.find_metadata(b'eXIf')
     original = metadata.profile
     metadata.validate_profile_structure()
     assert PngImage.parse(image.dump_to_bytes()).find_metadata(b'eXIf')[0].profile == original

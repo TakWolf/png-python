@@ -31,7 +31,7 @@ def validate_exif_structure(profile: bytes, *, check_fields: bool = False) -> No
             if not following:
                 break
             extent(following, 2, 'primary IFD')
-            count, = unpack_from(endian + 'H', profile, following)
+            (count,) = unpack_from(endian + 'H', profile, following)
             extent(following, 2 + 12 * count + 4, 'primary IFD table')
             following = uint32(following + 2 + 12 * count)
         if following:
@@ -50,7 +50,7 @@ def validate_exif_structure(profile: bytes, *, check_fields: bool = False) -> No
         if states.get(key) == 2:
             continue  # Sharing an entire already-checked directory is harmless.
         extent(offset, 2, 'IFD')
-        count, = unpack_from(endian + 'H', profile, offset)
+        (count,) = unpack_from(endian + 'H', profile, offset)
         if not count:
             raise PngValidationError('Exif IFD must contain at least one entry')
         size = 2 + count * 12 + 4
@@ -76,7 +76,7 @@ def validate_exif_structure(profile: bytes, *, check_fields: bool = False) -> No
             value_start = uint32(entry + 8) if value_size > 4 else entry + 8
             fields[tag] = (kind, number, value_start)
             if kind in (2, 129):
-                value = profile[value_start:value_start + value_size]
+                value = profile[value_start : value_start + value_size]
                 if not value or value[-1] != 0:
                     raise PngValidationError('Exif ASCII/UTF-8 fields require a null terminator')
                 try:
@@ -115,10 +115,16 @@ def validate_exif_structure(profile: bytes, *, check_fields: bool = False) -> No
             if lengths_number != number:
                 raise PngValidationError('Exif strip/tile offset and byte count arrays must have equal counts')
             for index in range(number):
-                location, = unpack_from(endian + ('H' if offsets_kind == 3 else 'I'), profile,
-                                        offsets_start + index * _TIFF_TYPE_SIZES[offsets_kind])
-                length, = unpack_from(endian + ('H' if lengths_kind == 3 else 'I'), profile,
-                                      lengths_start + index * _TIFF_TYPE_SIZES[lengths_kind])
+                (location,) = unpack_from(
+                    endian + ('H' if offsets_kind == 3 else 'I'),
+                    profile,
+                    offsets_start + index * _TIFF_TYPE_SIZES[offsets_kind],
+                )
+                (length,) = unpack_from(
+                    endian + ('H' if lengths_kind == 3 else 'I'),
+                    profile,
+                    lengths_start + index * _TIFF_TYPE_SIZES[lengths_kind],
+                )
                 # Compressed strips need not start at a word boundary. A zero
                 # byte count does not imply data to decode; retain empty entries.
                 if location > len(profile) or (length and (location < 8 or location + length > len(profile))):
@@ -138,12 +144,13 @@ def validate_exif_structure(profile: bytes, *, check_fields: bool = False) -> No
             if any(tag in exif for tag in (0xA439, 0xA43A, 0xA43B, 0xA43C)) and 0x0131 not in fields:
                 raise PngValidationError('Exif firmware/developing/editing fields require Software')
         from png._exif_binary import validate_binary
+
         root = directories.get((first, 'image'), {})
         source = directories.get((uint32(root[0x8769][2]), 'exif'), {}) if 0x8769 in root else {}
-        version = profile[source[0x9000][2]:source[0x9000][2] + 4] if 0x9000 in source else b''
+        version = profile[source[0x9000][2] : source[0x9000][2] + 4] if 0x9000 in source else b''
         for (offset, role), fields in directories.items():
             if role == 'gps':
                 for tag in (0x001B, 0x001C):
                     if tag in fields:
                         _, size, start = fields[tag]
-                        validate_binary(tag, profile[start:start + size], endian, version)
+                        validate_binary(tag, profile[start : start + size], endian, version)

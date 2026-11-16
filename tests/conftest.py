@@ -29,12 +29,12 @@ def icc_profile_bytes(assets_dir: Path) -> bytes:
 @pytest.fixture(scope='session')
 def gray_icc_profile_bytes(icc_profile_bytes: bytes) -> bytes:
     """In-memory v2.4 gray model vector derived from the official RGB profile."""
-    count, = unpack_from('>I', icc_profile_bytes, 128)
+    (count,) = unpack_from('>I', icc_profile_bytes, 128)
     tags = {}
     for index in range(count):
         signature, offset, size = unpack_from('>4sII', icc_profile_bytes, 132 + 12 * index)
         if signature in (b'desc', b'cprt', b'wtpt', b'chad', b'rTRC'):
-            tags[b'kTRC' if signature == b'rTRC' else signature] = icc_profile_bytes[offset:offset + size]
+            tags[b'kTRC' if signature == b'rTRC' else signature] = icc_profile_bytes[offset : offset + size]
     header = bytearray(icc_profile_bytes[:128])
     header[9] = 0x40
     header[16:20] = b'GRAY'

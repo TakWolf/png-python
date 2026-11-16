@@ -25,7 +25,7 @@ def validate_named_colors(data: bytes) -> None:
 
 
 def _fixed_name(data: bytes, start: int) -> None:
-    field = data[start:start + 32]
+    field = data[start : start + 32]
     terminator = field.find(b'\0')
     if terminator < 0 or any(value > 127 for value in field[:terminator]):
         raise PngValidationError('ICC ncl2 names require null-terminated 7-bit ASCII within 32 bytes')
@@ -35,14 +35,14 @@ def _fixed_name(data: bytes, start: int) -> None:
 
 def validate_colorant_table(data: bytes) -> None:
     _header(data, 12)
-    count, = unpack_from('>I', data, 8)
+    (count,) = unpack_from('>I', data, 8)
     if len(data) != 12 + 38 * count:
         raise PngValidationError('ICC clrt colorant count disagrees with its size')
     names = set()
     for index in range(count):
-        field = data[12 + 38 * index:44 + 38 * index]
+        field = data[12 + 38 * index : 44 + 38 * index]
         terminator = field.find(b'\0')
-        if terminator < 0 or any(value > 127 for value in field[:terminator]) or any(field[terminator + 1:]):
+        if terminator < 0 or any(value > 127 for value in field[:terminator]) or any(field[terminator + 1 :]):
             raise PngValidationError('ICC clrt names require null-terminated ASCII and zero unused bytes')
         name = field[:terminator]
         if name in names:
@@ -62,7 +62,7 @@ def validate_colorant_context(profile: bytes, signature: bytes, data: memoryview
 
 def validate_profile_sequence(data: bytes) -> None:
     _header(data, 12)
-    count, = unpack_from('>I', data, 8)
+    (count,) = unpack_from('>I', data, 8)
     # Every record has 20 fixed bytes and two descriptions. The shortest known
     # description is an empty 16-byte mluc placeholder.
     if count > (len(data) - 12) // 52:
@@ -80,7 +80,7 @@ def validate_profile_sequence(data: bytes) -> None:
 
 def validate_profile_identifiers(data: bytes) -> None:
     _header(data, 12)
-    count, = unpack_from('>I', data, 8)
+    (count,) = unpack_from('>I', data, 8)
     table_end = 12 + 8 * count
     if table_end > len(data):
         raise PngValidationError('ICC psid position table exceeds the tag')
@@ -92,7 +92,7 @@ def validate_profile_identifiers(data: bytes) -> None:
         # A record contains a 16-byte profile ID and at least an empty mluc.
         if offset < table_end or offset % 4 or size < 32 or end > len(data):
             raise PngValidationError('ICC psid record offset or size is invalid')
-        if any(view[end:min((end + 3) & ~3, len(data))]):
+        if any(view[end : min((end + 3) & ~3, len(data))]):
             raise PngValidationError('ICC psid record alignment padding must be zero')
         extent = (offset, size)
         if extent not in checked:

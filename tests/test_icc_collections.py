@@ -12,7 +12,7 @@ def _dictionary(records, stride=16):
     body, table, offsets = bytearray(), bytearray(), {}
     start = 16 + stride * len(records)
     for record in records:
-        for index, item in enumerate(record[:stride // 8]):
+        for index, item in enumerate(record[: stride // 8]):
             if item is None:
                 table.extend(bytes(8))
                 continue
@@ -35,29 +35,58 @@ def _response(codes=((0, 32768, 65535),), unit=b'StaT'):
 @pytest.mark.parametrize('stride', [16, 24, 32])
 @pytest.mark.parametrize('value', [None, '', 'Value', 'PNG\U0001f600'])
 def test_dictionary_optional_values_localization_and_shared_items(stride, value):
-    records = [('One', value, _localized('Label'), _localized('Value')),
-               ('Two', value, _localized('Label'), None)]
+    records = [('One', value, _localized('Label'), _localized('Value')), ('Two', value, _localized('Label'), None)]
     validate_dictionary(_dictionary(records, stride))
     validate_dictionary(_dictionary([], stride))
 
 
-@pytest.mark.parametrize('damage', ['header', 'stride', 'count', 'name_missing', 'name_empty', 'duplicate',
-                                   'offset', 'unaligned', 'short', 'odd', 'utf16', 'null', 'padding', 'display_type'])
+@pytest.mark.parametrize(
+    'damage',
+    [
+        'header',
+        'stride',
+        'count',
+        'name_missing',
+        'name_empty',
+        'duplicate',
+        'offset',
+        'unaligned',
+        'short',
+        'odd',
+        'utf16',
+        'null',
+        'padding',
+        'display_type',
+    ],
+)
 def test_dictionary_bounds_and_unicode_errors(damage):
     data = _dictionary([('Name', 'Value', _localized('Label'), None)], 32)
-    if damage == 'header': data = data[:15]
-    elif damage == 'stride': data = _u32(data, 12, 20)
-    elif damage == 'count': data = _u32(data, 8, 0xFFFFFFFF)
-    elif damage == 'name_missing': data = _u32(data, 16, 0)
-    elif damage == 'name_empty': data = _u32(data, 20, 0)
-    elif damage == 'duplicate': data = _dictionary([('Same', None, None, None)] * 2)
-    elif damage == 'offset': data = _u32(data, 16, 16)
-    elif damage == 'unaligned': data = _u32(data, 16, 49)
-    elif damage == 'short': data = _u32(data, 20, 0xFFFFFFFE)
-    elif damage == 'odd': data = _u32(data, 20, 3)
-    elif damage == 'utf16': data = data[:48] + b'\xd8\0' + data[50:]
-    elif damage == 'null': data = data[:54] + bytes(2) + data[56:]
-    elif damage == 'padding': data = _dictionary([('A', None, None, None)])[:-1] + b'\1'
+    if damage == 'header':
+        data = data[:15]
+    elif damage == 'stride':
+        data = _u32(data, 12, 20)
+    elif damage == 'count':
+        data = _u32(data, 8, 0xFFFFFFFF)
+    elif damage == 'name_missing':
+        data = _u32(data, 16, 0)
+    elif damage == 'name_empty':
+        data = _u32(data, 20, 0)
+    elif damage == 'duplicate':
+        data = _dictionary([('Same', None, None, None)] * 2)
+    elif damage == 'offset':
+        data = _u32(data, 16, 16)
+    elif damage == 'unaligned':
+        data = _u32(data, 16, 49)
+    elif damage == 'short':
+        data = _u32(data, 20, 0xFFFFFFFE)
+    elif damage == 'odd':
+        data = _u32(data, 20, 3)
+    elif damage == 'utf16':
+        data = data[:48] + b'\xd8\0' + data[50:]
+    elif damage == 'null':
+        data = data[:54] + bytes(2) + data[56:]
+    elif damage == 'padding':
+        data = _dictionary([('A', None, None, None)])[:-1] + b'\1'
     else:
         data = _dictionary([('A', None, b'zzzz' + bytes(12), None)], 32)
     with pytest.raises(PngValidationError, match='ICC'):
@@ -77,17 +106,27 @@ def test_response_curve_counts_and_channel_arrays(codes):
     validate_response_curves(_response(codes))
 
 
-@pytest.mark.parametrize('damage', ['header', 'table', 'offset', 'count', 'short', 'reserved', 'descending', 'repeated'])
+@pytest.mark.parametrize(
+    'damage', ['header', 'table', 'offset', 'count', 'short', 'reserved', 'descending', 'repeated']
+)
 def test_response_curve_truncation_and_code_order(damage):
     data = _response()
-    if damage == 'header': data = data[:11]
-    elif damage == 'table': data = data[:15]
-    elif damage == 'offset': data = _u32(data, 12, 0xFFFFFFFF)
-    elif damage == 'count': data = _u32(data, 20, 0xFFFFFFFF)
-    elif damage == 'short': data = data[:-1]
-    elif damage == 'reserved': data = data[:38] + b'\0\1' + data[40:]
-    elif damage == 'descending': data = _response(((20, 10),))
-    else: data = _response(((10, 10),))
+    if damage == 'header':
+        data = data[:11]
+    elif damage == 'table':
+        data = data[:15]
+    elif damage == 'offset':
+        data = _u32(data, 12, 0xFFFFFFFF)
+    elif damage == 'count':
+        data = _u32(data, 20, 0xFFFFFFFF)
+    elif damage == 'short':
+        data = data[:-1]
+    elif damage == 'reserved':
+        data = data[:38] + b'\0\1' + data[40:]
+    elif damage == 'descending':
+        data = _response(((20, 10),))
+    else:
+        data = _response(((10, 10),))
     with pytest.raises(PngValidationError, match='ICC'):
         validate_response_curves(data)
 
@@ -106,7 +145,8 @@ def test_collections_are_preserved_and_checked_before_png_writes(assets_dir, png
     if damaged:
         for model in (image, document):
             stream = BytesIO(b'unchanged')
-            with pytest.raises(PngValidationError): model.dump(stream)
+            with pytest.raises(PngValidationError):
+                model.dump(stream)
             assert stream.getvalue() == b'unchanged'
     else:
         for model in (image, document):

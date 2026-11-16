@@ -31,8 +31,8 @@ def _positions(items: list[bytes], start: int, storage_order: list[int] | None =
 
 
 def _mpet(elements: list[bytes], storage_order: list[int] | None = None) -> bytes:
-    inputs, = unpack_from('>H', elements[0], 8)
-    outputs, = unpack_from('>H', elements[-1], 10)
+    (inputs,) = unpack_from('>H', elements[0], 8)
+    (outputs,) = unpack_from('>H', elements[-1], 10)
     return b'mpet' + bytes(4) + pack('>HHI', inputs, outputs, len(elements)) + _positions(elements, 16, storage_order)
 
 
@@ -46,8 +46,13 @@ def _sample(values: tuple[float, ...] = (0, 1)) -> bytes:
 
 
 def _curve(segments: list[bytes], breakpoints: tuple[float, ...] = ()) -> bytes:
-    return (b'curf' + bytes(4) + pack('>HH', len(segments), 0)
-            + pack('>' + 'f' * len(breakpoints), *breakpoints) + b''.join(segments))
+    return (
+        b'curf'
+        + bytes(4)
+        + pack('>HH', len(segments), 0)
+        + pack('>' + 'f' * len(breakpoints), *breakpoints)
+        + b''.join(segments)
+    )
 
 
 def _curves(curves: list[bytes]) -> bytes:
@@ -55,20 +60,27 @@ def _curves(curves: list[bytes]) -> bytes:
 
 
 def _clut(inputs: int = 3, outputs: int = 3) -> bytes:
-    return _element(b'clut', inputs, outputs,
-                    bytes((2,)) * inputs + bytes(16 - inputs) + pack('>f', 0.5) * (2 ** inputs * outputs))
+    return _element(
+        b'clut', inputs, outputs, bytes((2,)) * inputs + bytes(16 - inputs) + pack('>f', 0.5) * (2**inputs * outputs)
+    )
 
 
 def _u32(data: bytes, offset: int, value: int) -> bytes:
-    return data[:offset] + pack('>I', value) + data[offset + 4:]
+    return data[:offset] + pack('>I', value) + data[offset + 4 :]
 
 
-@pytest.mark.parametrize('elements', [
-    [_matrix()], [_matrix(3, 20), _matrix(20, 1)], [_matrix(32, 32)],
-    [_matrix(3, 0), _matrix(0, 3)], [_matrix(3, 0), _curves([]), _matrix(0, 3)],
-    [_clut(1, 3), _matrix(3, 1)],
-    [_element(b'bACS', 3, 3, b'abcd'), _matrix(), _element(b'eACS', 3, 3, b'abcd')],
-])
+@pytest.mark.parametrize(
+    'elements',
+    [
+        [_matrix()],
+        [_matrix(3, 20), _matrix(20, 1)],
+        [_matrix(32, 32)],
+        [_matrix(3, 0), _matrix(0, 3)],
+        [_matrix(3, 0), _curves([]), _matrix(0, 3)],
+        [_clut(1, 3), _matrix(3, 1)],
+        [_element(b'bACS', 3, 3, b'abcd'), _matrix(), _element(b'eACS', 3, 3, b'abcd')],
+    ],
+)
 def test_mpet_known_elements_and_channel_chains(elements: list[bytes]) -> None:
     validate_mpet(_mpet(elements))
 
@@ -79,6 +91,7 @@ def test_mpet_position_order_and_storage_order_are_independent() -> None:
 
 def test_mpet_shared_elements_are_checked_once(monkeypatch) -> None:
     import png._icc_mpet as implementation
+
     original = implementation._validate_element
     calls = []
 
@@ -105,11 +118,31 @@ def test_unknown_elements_still_obey_common_storage_rules(damage: str) -> None:
         validate_mpet(data)
 
 
-@pytest.mark.parametrize('damage', ['header', 'reserved', 'zero_inputs', 'zero_outputs', 'zero_count',
-                                    'table_count', 'offset_header', 'offset_odd', 'offset_outside',
-                                    'first_stored', 'short_element', 'element_extent', 'element_reserved',
-                                    'element_zero', 'input_chain', 'output_chain', 'matrix_count',
-                                    'matrix_extra', 'expansion_count', 'expansion_channels'])
+@pytest.mark.parametrize(
+    'damage',
+    [
+        'header',
+        'reserved',
+        'zero_inputs',
+        'zero_outputs',
+        'zero_count',
+        'table_count',
+        'offset_header',
+        'offset_odd',
+        'offset_outside',
+        'first_stored',
+        'short_element',
+        'element_extent',
+        'element_reserved',
+        'element_zero',
+        'input_chain',
+        'output_chain',
+        'matrix_count',
+        'matrix_extra',
+        'expansion_count',
+        'expansion_channels',
+    ],
+)
 def test_mpet_headers_positions_and_element_sizes(damage: str) -> None:
     data = _mpet([_matrix()])
     if damage == 'header':
@@ -181,17 +214,39 @@ def test_mpet_clut_dimensions_and_sizes(damage: str) -> None:
 @pytest.mark.parametrize('function', [0, 1, 2])
 @pytest.mark.parametrize('middle', [False, True])
 def test_mpet_formula_and_sampled_segment_layouts(function: int, middle: bool) -> None:
-    curve = (_curve([_formula(function), _sample((0.5,)), _formula(function)], (0, 1)) if middle
-             else _curve([_formula(function)]))
+    curve = (
+        _curve([_formula(function), _sample((0.5,)), _formula(function)], (0, 1))
+        if middle
+        else _curve([_formula(function)])
+    )
     validate_mpet(_mpet([_curves([curve] * 3)]))
     if middle:
         validate_mpet(_mpet([_curves([_curve([_formula(), _sample(), _formula()], (0, 0))])]))
 
 
-@pytest.mark.parametrize('damage', ['set_channels', 'curve_table', 'curve_offset', 'curve_size', 'curve_signature',
-                                    'curve_reserved', 'zero_segments', 'segment_reserved', 'breakpoint_count',
-                                    'breakpoint_order', 'first_sampled', 'last_sampled', 'formula_function',
-                                    'formula_reserved', 'formula_size', 'zero_samples', 'sample_count', 'extra_curve'])
+@pytest.mark.parametrize(
+    'damage',
+    [
+        'set_channels',
+        'curve_table',
+        'curve_offset',
+        'curve_size',
+        'curve_signature',
+        'curve_reserved',
+        'zero_segments',
+        'segment_reserved',
+        'breakpoint_count',
+        'breakpoint_order',
+        'first_sampled',
+        'last_sampled',
+        'formula_function',
+        'formula_reserved',
+        'formula_size',
+        'zero_samples',
+        'sample_count',
+        'extra_curve',
+    ],
+)
 def test_mpet_curve_positions_and_segment_bounds(damage: str) -> None:
     curve = _curve([_formula(), _sample(), _formula()], (0, 1))
     if damage == 'curve_signature':
@@ -264,9 +319,9 @@ def test_mpet_rejects_subnormal_and_nonfinite_floats(bits: int, location: str) -
 
 
 def _with_mpet(profile: bytes, tag: bytes, payload: bytes) -> bytes:
-    count, = unpack_from('>I', profile, 128)
+    (count,) = unpack_from('>I', profile, 128)
     entries = [unpack_from('>4sII', profile, 132 + 12 * index) for index in range(count)]
-    tags = [(kind, profile[offset:offset + size]) for kind, offset, size in entries] + [(tag, payload)]
+    tags = [(kind, profile[offset : offset + size]) for kind, offset, size in entries] + [(tag, payload)]
     table = bytearray()
     body = bytearray()
     for kind, value in tags:
@@ -304,7 +359,11 @@ def test_mpet_gray_channel_direction(tag: bytes) -> None:
 @pytest.mark.parametrize('representation', ['image', 'document'])
 @pytest.mark.parametrize('mode', ['known', 'unknown', 'damaged'])
 def test_mpet_png_roundtrip_and_write_protection(
-        assets_dir: Path, png_suite_dir: Path, tmp_path: Path, representation: str, mode: str,
+    assets_dir: Path,
+    png_suite_dir: Path,
+    tmp_path: Path,
+    representation: str,
+    mode: str,
 ) -> None:
     profile = assets_dir.joinpath('icc', 'sRGB_v4_ICC_preference.icc').read_bytes()
     element = _element(b'zzzz', 3, 3, b'opaque future data\xff') if mode == 'unknown' else _matrix()

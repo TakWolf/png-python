@@ -4,8 +4,16 @@ from fractions import Fraction
 import pytest
 
 from png import (
-    PngAnimation, PngBlendOp, PngChunk, PngColorType, PngDocument,
-    PngFrame, PngFrameControl, PngHeader, PngImage, PngValidationError,
+    PngAnimation,
+    PngBlendOp,
+    PngChunk,
+    PngColorType,
+    PngDocument,
+    PngFrame,
+    PngFrameControl,
+    PngHeader,
+    PngImage,
+    PngValidationError,
 )
 
 
@@ -64,7 +72,9 @@ def test_invalid_bitmap(bitmap: list[list[int]]) -> None:
 def test_indexed_samples_and_palette_transparency() -> None:
     image = PngImage(
         PngHeader((2, 1), bit_depth=1, color_type=PngColorType.INDEXED_COLOR),
-        bitmap=[[0, 1]], palette=[(0, 0, 0), (255, 255, 255)], palette_alpha=[0],
+        bitmap=[[0, 1]],
+        palette=[(0, 0, 0), (255, 255, 255)],
+        palette_alpha=[0],
     )
     image.validate()
     assert image.bitmap == [[0, 1]]
@@ -79,10 +89,13 @@ def test_indexed_samples_and_palette_transparency() -> None:
         image.validate()
 
 
-@pytest.mark.parametrize(('color', 'depth', 'bitmap', 'transparent'), [
-    (PngColorType.GRAYSCALE, 2, [[0, 3]], (3,)),
-    (PngColorType.TRUECOLOR, 16, [[0, 1, 65535]], (0, 1, 65535)),
-])
+@pytest.mark.parametrize(
+    ('color', 'depth', 'bitmap', 'transparent'),
+    [
+        (PngColorType.GRAYSCALE, 2, [[0, 3]], (3,)),
+        (PngColorType.TRUECOLOR, 16, [[0, 1, 65535]], (0, 1, 65535)),
+    ],
+)
 def test_transparent_sample_depth(color, depth, bitmap, transparent) -> None:
     width = len(bitmap[0]) // color.channels
     image = PngImage(PngHeader((width, 1), depth, color), bitmap, transparent_color=transparent)
@@ -119,9 +132,15 @@ def test_default_frame_has_one_pixel_source() -> None:
 
 
 def test_poster_is_not_an_animation_frame() -> None:
-    image = PngImage(PngHeader((2, 1)), [[0] * 8], animation=PngAnimation(frames=[
-        PngFrame(PngFrameControl((1, 1), offset=(1, 0)), [[255] * 4]),
-    ]))
+    image = PngImage(
+        PngHeader((2, 1)),
+        [[0] * 8],
+        animation=PngAnimation(
+            frames=[
+                PngFrame(PngFrameControl((1, 1), offset=(1, 0)), [[255] * 4]),
+            ]
+        ),
+    )
     image.validate()
     assert image.animation.num_frames == 1
     image.animation.frames[0].control.offset_x = 2
@@ -131,7 +150,8 @@ def test_poster_is_not_an_animation_frame() -> None:
 
 def test_animation_frames_inherit_sample_format() -> None:
     image = PngImage(
-        PngHeader((1, 1), bit_depth=2, color_type=PngColorType.GRAYSCALE), [[3]],
+        PngHeader((1, 1), bit_depth=2, color_type=PngColorType.GRAYSCALE),
+        [[3]],
         animation=PngAnimation(frames=[PngFrame(PngFrameControl((1, 1)), [[4]])]),
     )
     with pytest.raises(PngValidationError):
@@ -149,10 +169,19 @@ def test_frame_delay_preserves_zero_denominator() -> None:
     assert control.delay == Fraction(1, 60)
 
 
-@pytest.mark.parametrize(('field', 'value'), [
-    ('width', 0), ('height', -1), ('offset_x', -1), ('offset_y', 1),
-    ('delay_num', 65536), ('delay_den', -1), ('dispose_op', 3), ('blend_op', 2),
-])
+@pytest.mark.parametrize(
+    ('field', 'value'),
+    [
+        ('width', 0),
+        ('height', -1),
+        ('offset_x', -1),
+        ('offset_y', 1),
+        ('delay_num', 65536),
+        ('delay_den', -1),
+        ('dispose_op', 3),
+        ('blend_op', 2),
+    ],
+)
 def test_frame_validation(field: str, value: int) -> None:
     control = PngFrameControl((1, 1))
     setattr(control, field, value)

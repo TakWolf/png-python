@@ -18,14 +18,37 @@ UNDERSTOOD_TYPES = CRITICAL_TYPES | {b'tRNS', b'acTL', b'fcTL', b'fdAT'} | METAD
 
 _BEFORE_PALETTE = frozenset((b'cHRM', b'cICP', b'gAMA', b'iCCP', b'mDCV', b'cLLI', b'sBIT', b'sRGB'))
 _AFTER_PALETTE = frozenset((b'bKGD', b'hIST', b'tRNS'))
-_BEFORE_DATA = _BEFORE_PALETTE | _AFTER_PALETTE | {
-    b'PLTE', b'acTL', b'eXIf', b'pHYs', b'sPLT', b'oFFs', b'pCAL', b'sCAL', b'sTER',
-}
+_BEFORE_DATA = (
+    _BEFORE_PALETTE
+    | _AFTER_PALETTE
+    | {
+        b'PLTE',
+        b'acTL',
+        b'eXIf',
+        b'pHYs',
+        b'sPLT',
+        b'oFFs',
+        b'pCAL',
+        b'sCAL',
+        b'sTER',
+    }
+)
 _SINGLETONS = _BEFORE_DATA - {b'sPLT'} | {b'IHDR', b'IEND', b'tIME'}
 _FIXED_LENGTHS = {
-    b'IHDR': 13, b'IEND': 0, b'cHRM': 32, b'gAMA': 4, b'cICP': 4, b'mDCV': 24,
-    b'cLLI': 8, b'sRGB': 1, b'pHYs': 9, b'tIME': 7, b'acTL': 8, b'fcTL': 26,
-    b'oFFs': 9, b'sTER': 1,
+    b'IHDR': 13,
+    b'IEND': 0,
+    b'cHRM': 32,
+    b'gAMA': 4,
+    b'cICP': 4,
+    b'mDCV': 24,
+    b'cLLI': 8,
+    b'sRGB': 1,
+    b'pHYs': 9,
+    b'tIME': 7,
+    b'acTL': 8,
+    b'fcTL': 26,
+    b'oFFs': 9,
+    b'sTER': 1,
 }
 
 
@@ -116,7 +139,10 @@ class ChunkStructure:
 
 
 def validate_structure(
-        chunks: list[PngChunk], *, limits: PngReadLimits | None = None, check_profile_structure: bool = False,
+    chunks: list[PngChunk],
+    *,
+    limits: PngReadLimits | None = None,
+    check_profile_structure: bool = False,
 ) -> None:
     budget = ReadBudget(limits)
     budget.signature()
@@ -132,5 +158,6 @@ def validate_structure(
         budget.chunk(chunk.length)
         budget.inspect(chunk.type, chunk.data)
     scan_animation(chunks, header)
-    validate_metadata_chunks(chunks, header, structure.palette_size, budget=budget,
-                             check_profile_structure=check_profile_structure)
+    validate_metadata_chunks(
+        chunks, header, structure.palette_size, budget=budget, check_profile_structure=check_profile_structure
+    )

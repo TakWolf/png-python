@@ -36,10 +36,10 @@ def validate_values(profile: bytes, endian: str, role: str, fields: dict[int, tu
                 raise PngValidationError(f'Exif field {tag:#06x} has a reserved value')
         if 0x9101 in fields:
             start = fields[0x9101][2]
-            if any(value > 6 for value in profile[start:start + 4]):
+            if any(value > 6 for value in profile[start : start + 4]):
                 raise PngValidationError('Exif ComponentsConfiguration uses a reserved component')
         if 0x9209 in fields:
-            value, = unpack_from(endian + 'H', profile, fields[0x9209][2])
+            (value,) = unpack_from(endian + 'H', profile, fields[0x9209][2])
             if value & 0xFF80 or value & 6 == 2:
                 raise PngValidationError('Exif Flash uses reserved bits or return status')
     if role == 'gps' and 5 in fields and profile[fields[5][2]] > 3:
@@ -50,7 +50,7 @@ def validate_values(profile: bytes, endian: str, role: str, fields: dict[int, tu
         if tag not in fields:
             continue
         _, count, start = fields[tag]
-        value = profile[start:start + count - 1]
+        value = profile[start : start + count - 1]
         pattern = rb'[0-9 ]{4}:[0-9 ]{2}:[0-9 ]{2}'
         if role != 'gps':
             pattern += rb' [0-9 ]{2}:[0-9 ]{2}:[0-9 ]{2}'
@@ -61,7 +61,7 @@ def validate_values(profile: bytes, endian: str, role: str, fields: dict[int, tu
             if tag not in fields:
                 continue
             _, count, start = fields[tag]
-            value = profile[start:start + count - 1]
+            value = profile[start : start + count - 1]
             if tag in (0x9010, 0x9011, 0x9012):
                 valid = value in (b'      ', b'   :  ') or re.fullmatch(rb'[+-][0-9]{2}:[0-9]{2}', value)
             elif tag == 0xA420:

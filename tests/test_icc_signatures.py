@@ -10,10 +10,34 @@ from tests.test_icc_tags import _rebuild, _tags
 
 
 _TECHNOLOGIES = (
-    b'fscn', b'dcam', b'rscn', b'ijet', b'twax', b'epho', b'esta', b'dsub',
-    b'rpho', b'fprn', b'vidm', b'vidc', b'pjtv', b'CRT ', b'PMD ', b'AMD ',
-    b'LCD ', b'OLED', b'KPCD', b'imgs', b'grav', b'offs', b'silk', b'flex',
-    b'mpfs', b'mpfr', b'dmpc', b'dcpj',
+    b'fscn',
+    b'dcam',
+    b'rscn',
+    b'ijet',
+    b'twax',
+    b'epho',
+    b'esta',
+    b'dsub',
+    b'rpho',
+    b'fprn',
+    b'vidm',
+    b'vidc',
+    b'pjtv',
+    b'CRT ',
+    b'PMD ',
+    b'AMD ',
+    b'LCD ',
+    b'OLED',
+    b'KPCD',
+    b'imgs',
+    b'grav',
+    b'offs',
+    b'silk',
+    b'flex',
+    b'mpfs',
+    b'mpfr',
+    b'dmpc',
+    b'dcpj',
 )
 
 
@@ -40,12 +64,23 @@ def test_defined_reference_medium_gamut(profile, tag):
     PngIccProfile('Gamut vector', _rebuild(profile, tags)).validate_profile_tags()
 
 
-@pytest.mark.parametrize(('tag', 'value'), [
-    (b'tech', b'bad!'), (b'tech', bytes(4)), (b'tech', b'CRT\0'),
-    (b'tech', b'LCD\0'), (b'tech', b'oled'), (b'tech', b'prmg'),
-    (b'rig0', b'CRT '), (b'rig0', bytes(4)), (b'rig0', b'PRMG'),
-    (b'rig2', b'CRT '), (b'rig2', bytes(4)), (b'rig2', b'PRMG'),
-])
+@pytest.mark.parametrize(
+    ('tag', 'value'),
+    [
+        (b'tech', b'bad!'),
+        (b'tech', bytes(4)),
+        (b'tech', b'CRT\0'),
+        (b'tech', b'LCD\0'),
+        (b'tech', b'oled'),
+        (b'tech', b'prmg'),
+        (b'rig0', b'CRT '),
+        (b'rig0', bytes(4)),
+        (b'rig0', b'PRMG'),
+        (b'rig2', b'CRT '),
+        (b'rig2', bytes(4)),
+        (b'rig2', b'PRMG'),
+    ],
+)
 def test_undefined_or_wrong_context_signatures_are_rejected(profile, tag, value):
     tags = _tags(profile)
     tags[tag] = _signature(value)
@@ -92,7 +127,9 @@ def test_shared_signature_data_is_checked_in_each_tag_context(profile):
 
 @pytest.mark.parametrize('tag', [b'tech', b'rig0', b'rig2'])
 @pytest.mark.parametrize('representation', ['image', 'document'])
-def test_bad_signature_values_are_readable_and_do_not_touch_output(profile, tag, representation, png_suite_dir, tmp_path):
+def test_bad_signature_values_are_readable_and_do_not_touch_output(
+    profile, tag, representation, png_suite_dir, tmp_path
+):
     tags = _tags(profile)
     tags[tag] = _signature(b'bad!')
     profile = _rebuild(profile, tags)
@@ -104,9 +141,11 @@ def test_bad_signature_values_are_readable_and_do_not_touch_output(profile, tag,
     assert restored.find_metadata(b'iCCP')[0].profile == profile
     result = restored if representation == 'image' else PngDocument.parse(raw)
     stream = BytesIO(b'unchanged')
-    with pytest.raises(PngValidationError, match='signature'): result.dump(stream)
+    with pytest.raises(PngValidationError, match='signature'):
+        result.dump(stream)
     assert stream.getvalue() == b'unchanged'
     target = tmp_path.joinpath('existing.png')
     target.write_bytes(b'unchanged')
-    with pytest.raises(PngValidationError, match='signature'): result.save(target)
+    with pytest.raises(PngValidationError, match='signature'):
+        result.save(target)
     assert target.read_bytes() == b'unchanged'

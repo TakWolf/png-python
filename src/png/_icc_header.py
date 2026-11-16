@@ -23,7 +23,7 @@ def validate_header_fields(profile: bytes) -> None:
     # narrower 1..9999 range. Check the field ranges stated in its definition.
     if not 1 <= month <= 12 or not 1 <= day <= 31 or hour > 23 or minute > 59 or second > 59:
         raise PngValidationError('ICC creation date/time fields are outside their ranges')
-    intent, = unpack_from('>I', profile, 64)
+    (intent,) = unpack_from('>I', profile, 64)
     if intent > 3:
         raise PngValidationError('ICC rendering intent must be between 0 and 3')
     illuminant = unpack_from('>3i', profile, 68)
@@ -34,7 +34,7 @@ def validate_header_fields(profile: bytes) -> None:
     if profile[8] == 4:
         if profile[40:44] not in (bytes(4), b'APPL', b'MSFT', b'SGI ', b'SUNW'):
             raise PngValidationError('ICC v4 primary platform uses an undefined signature')
-        attributes, = unpack_from('>Q', profile, 56)
+        (attributes,) = unpack_from('>Q', profile, 56)
         if attributes & 0xFFFFFFF0:
             raise PngValidationError('ICC v4 device attribute reserved bits must be zero')
     if any(profile[100:128]):
@@ -58,8 +58,7 @@ def _validate_registrations(profile: bytes) -> None:
     # recommends registration for the creator, so it is deliberately excluded.
     from png._icc_registry_data import CMM, DEVICES, MANUFACTURERS
 
-    for name, signature, registered in (('CMM', profile[4:8], CMM),
-                                         ('manufacturer', profile[48:52], MANUFACTURERS)):
+    for name, signature, registered in (('CMM', profile[4:8], CMM), ('manufacturer', profile[48:52], MANUFACTURERS)):
         if any(signature) and signature not in registered:
             raise PngUnsupportedError(
                 f'ICC {name} {signature!r} cannot be confirmed by the 2026-11-16 registry snapshot'

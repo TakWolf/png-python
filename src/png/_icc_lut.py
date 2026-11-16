@@ -12,11 +12,11 @@ _IDENTITY = (65536, 0, 0, 0, 65536, 0, 0, 0, 65536)
 
 def curve_end(data: bytes, offset: int = 0) -> int:
     """Return the unpadded end of a complete embedded curve, without copying it."""
-    if offset + 12 > len(data) or data[offset + 4:offset + 8] != bytes(4):
+    if offset + 12 > len(data) or data[offset + 4 : offset + 8] != bytes(4):
         raise PngValidationError('ICC curve header is truncated or has nonzero reserved bytes')
-    kind = data[offset:offset + 4]
+    kind = data[offset : offset + 4]
     if kind == b'curv':
-        count, = unpack_from('>I', data, offset + 8)
+        (count,) = unpack_from('>I', data, offset + 8)
         end = offset + 12 + 2 * count
     elif kind == b'para':
         function, reserved = unpack_from('>HH', data, offset + 8)
@@ -71,8 +71,11 @@ def validate_lut(data: bytes) -> None:
 
     # Check each individual curve once, including when two groups share a suffix.
     checked: dict[int, int] = {}
-    for offset, count in ((b_curves, middle_channels), (m_curves, middle_channels),
-                          (a_curves, outputs if reverse else inputs)):
+    for offset, count in (
+        (b_curves, middle_channels),
+        (m_curves, middle_channels),
+        (a_curves, outputs if reverse else inputs),
+    ):
         if not offset:
             continue
         for index in range(count):
@@ -81,7 +84,7 @@ def validate_lut(data: bytes) -> None:
                 end = curve_end(data, offset)
                 checked[offset] = end
             padded = (end + 3) & ~3
-            if any(data[end:min(padded, len(data))]):
+            if any(data[end : min(padded, len(data))]):
                 raise PngValidationError('ICC LUT curve padding must be zero')
             if index + 1 < count and padded > len(data):
                 raise PngValidationError('ICC LUT curve padding exceeds the tag')
@@ -90,11 +93,11 @@ def validate_lut(data: bytes) -> None:
     if clut:
         if clut + 20 > len(data):
             raise PngValidationError('ICC LUT CLUT header is truncated')
-        grid = data[clut:clut + inputs]
+        grid = data[clut : clut + inputs]
         precision = data[clut + 16]
-        if any(points < 2 for points in grid) or any(data[clut + inputs:clut + 16]):
+        if any(points < 2 for points in grid) or any(data[clut + inputs : clut + 16]):
             raise PngValidationError('ICC LUT CLUT grid or unused dimensions are invalid')
-        if precision not in (1, 2) or any(data[clut + 17:clut + 20]):
+        if precision not in (1, 2) or any(data[clut + 17 : clut + 20]):
             raise PngValidationError('ICC LUT CLUT precision or reserved bytes are invalid')
         if clut + 20 + prod(grid) * outputs * precision > len(data):
             raise PngValidationError('ICC LUT CLUT data exceeds the tag')

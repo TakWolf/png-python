@@ -12,8 +12,10 @@ def _payload_arrays(endian, offsets_tag, count_tag, kind, offsets, sizes):
     start = 38
     external = bytearray()
     fields = []
-    for tag, values, value_kind in ((offsets_tag, offsets, 4 if offsets_tag == 0x144 else kind),
-                                     (count_tag, sizes, kind)):
+    for tag, values, value_kind in (
+        (offsets_tag, offsets, 4 if offsets_tag == 0x144 else kind),
+        (count_tag, sizes, kind),
+    ):
         encoded = pack(endian + ('H' if value_kind == 3 else 'I') * len(values), *values)
         if len(encoded) > 4:
             value = pack(endian + 'I', start + len(external))
@@ -38,9 +40,12 @@ def test_strip_tile_payload_arrays_with_mixed_storage(endian, offsets_tag, count
 @pytest.mark.parametrize(('offsets_tag', 'count_tag'), [(0x111, 0x117), (0x144, 0x145)])
 def test_strip_tile_payload_errors(offsets_tag, count_tag, damage):
     offsets, lengths = [55, 57], [1, 2]
-    if damage == 'outside': offsets[0] = 0xFFFFFFFE
-    elif damage == 'length': lengths[0] = 0xFFFFFFFF
-    elif damage == 'counts': lengths = [1]
+    if damage == 'outside':
+        offsets[0] = 0xFFFFFFFE
+    elif damage == 'length':
+        lengths[0] = 0xFFFFFFFF
+    elif damage == 'counts':
+        lengths = [1]
     data = _payload_arrays('>', offsets_tag, count_tag, 4, offsets, lengths)
     if damage == 'unpaired':
         data = _tiff([(offsets_tag, 4, 1, pack('>I', 26))], tail=b'abc')
@@ -55,8 +60,7 @@ def test_strip_tile_payload_errors(offsets_tag, count_tag, damage):
 def test_exif_utf8_type_129(endian, value, png_suite_dir):
     encoded = value.encode('utf-8') + b'\0'
     inline = encoded + bytes(4 - len(encoded)) if len(encoded) <= 4 else pack(endian + 'I', 26)
-    data = _tiff([(0x010E, 129, len(encoded), inline)], endian=endian,
-                 tail=encoded if len(encoded) > 4 else b'')
+    data = _tiff([(0x010E, 129, len(encoded), inline)], endian=endian, tail=encoded if len(encoded) > 4 else b'')
     PngExif(data).validate_profile_tags()
     assert PngExif.from_chunk(PngExif(data).to_chunk()).profile == data
     image = PngImage.load(png_suite_dir.joinpath('basn2c08.png'))
@@ -66,8 +70,10 @@ def test_exif_utf8_type_129(endian, value, png_suite_dir):
     assert restored.bitmap == image.bitmap
 
 
-@pytest.mark.parametrize(('kind', 'encoded'), [(129, b'\xc0\x80\0'), (129, b'\xed\xa0\x80\0'),
-                                               (129, b'no\0x'), (2, b'\x80\0'), (2, b'no\0x')])
+@pytest.mark.parametrize(
+    ('kind', 'encoded'),
+    [(129, b'\xc0\x80\0'), (129, b'\xed\xa0\x80\0'), (129, b'no\0x'), (2, b'\x80\0'), (2, b'no\0x')],
+)
 def test_exif_text_requires_valid_encoding_and_terminator(kind, encoded):
     data = _tiff([(0x010E, kind, len(encoded), encoded + bytes(4 - len(encoded)))])
     with pytest.raises(PngValidationError, match='Exif'):
@@ -84,7 +90,8 @@ def test_orientation_errors_are_retained_but_block_png_writes(png_suite_dir, kin
     document = image.to_document()
     for model in (image, document):
         stream = BytesIO(b'unchanged')
-        with pytest.raises(PngValidationError, match='Exif'): model.dump(stream)
+        with pytest.raises(PngValidationError, match='Exif'):
+            model.dump(stream)
         assert stream.getvalue() == b'unchanged'
 
 
@@ -99,8 +106,9 @@ def test_exif_image_directory_chain_is_distinct_from_tiff_structure():
         PngExif(profile).validate_profile_tags()
 
 
-@pytest.mark.parametrize(('tag', 'kind', 'count'), [(0x9000, 2, 4), (0x9000, 7, 3),
-                                                  (0xA001, 4, 1), (0xA002, 3, 2), (0x010E, 7, 1)])
+@pytest.mark.parametrize(
+    ('tag', 'kind', 'count'), [(0x9000, 2, 4), (0x9000, 7, 3), (0xA001, 4, 1), (0xA002, 3, 2), (0x010E, 7, 1)]
+)
 def test_present_exif_standard_fields_have_their_declared_types(tag, kind, count):
     raw = _tiff([(tag, kind, count, bytes(4))])
     if tag >= 0x9000:
@@ -129,8 +137,7 @@ def test_ifd_namespaces_do_not_confuse_gps_and_interoperability():
 
 
 def test_exif_legacy_gain_control_and_current_version_types():
-    for version, kind, value in [(b'0232', 3, b'\0\1\0\0'), (b'0300', 3, b'\0\1\0\0'),
-                                  (b'0300', 5, pack('>I', 56))]:
+    for version, kind, value in [(b'0232', 3, b'\0\1\0\0'), (b'0300', 3, b'\0\1\0\0'), (b'0300', 5, pack('>I', 56))]:
         data = _child_ifd(0x8769, [(0x9000, 7, 4, version), (0xA407, kind, 1, value)])
         if kind == 5:
             data += pack('>II', 1, 1)
@@ -139,11 +146,14 @@ def test_exif_legacy_gain_control_and_current_version_types():
         PngExif(_child_ifd(0x8769, [(0x9000, 7, 4, b'0300'), (0xA407, 4, 1, b'\0\0\0\1')])).validate_profile_tags()
 
 
-@pytest.mark.parametrize('pointer,entries', [
-    (0x8769, [(0xA001, 3, 1, b'\0\1\0\0')]),
-    (0x8825, [(1, 2, 2, b'N\0\0\0')]),
-    (0x8825, [(0, 1, 4, bytes((2, 4, 0, 0))), (1, 2, 2, b'X\0\0\0')]),
-])
+@pytest.mark.parametrize(
+    'pointer,entries',
+    [
+        (0x8769, [(0xA001, 3, 1, b'\0\1\0\0')]),
+        (0x8825, [(1, 2, 2, b'N\0\0\0')]),
+        (0x8825, [(0, 1, 4, bytes((2, 4, 0, 0))), (1, 2, 2, b'X\0\0\0')]),
+    ],
+)
 def test_exif_ifd_version_and_reference_dependencies(pointer, entries):
     with pytest.raises(PngValidationError, match='Exif'):
         PngExif(_child_ifd(pointer, entries)).validate_profile_tags()

@@ -7,8 +7,18 @@ import zlib
 import pytest
 
 from png import (
-    PngChunk, PngCicp, PngColorType, PngDocument, PngHeader, PngIccProfile,
-    PngImage, PngLimitError, PngParseError, PngReadLimits, PngSrgb, PngValidationError,
+    PngChunk,
+    PngCicp,
+    PngColorType,
+    PngDocument,
+    PngHeader,
+    PngIccProfile,
+    PngImage,
+    PngLimitError,
+    PngParseError,
+    PngReadLimits,
+    PngSrgb,
+    PngValidationError,
 )
 
 
@@ -24,7 +34,10 @@ def _wire_bytes(document: PngDocument) -> bytes:
 @pytest.mark.parametrize('load', [PngDocument.load, PngImage.load])
 @pytest.mark.parametrize('tail', [b'\0', b'\n', b'not PNG data', bytes.fromhex('0000000049454e44ae426082')])
 def test_file_load_rejects_every_kind_of_content_after_iend(
-        png_suite_dir: Path, tmp_path: Path, load, tail: bytes,
+    png_suite_dir: Path,
+    tmp_path: Path,
+    load,
+    tail: bytes,
 ) -> None:
     data = png_suite_dir.joinpath('basn2c08.png').read_bytes()
     path = tmp_path.joinpath('trailing-content.png')
@@ -38,7 +51,8 @@ def test_file_load_rejects_every_kind_of_content_after_iend(
 
 
 def test_file_load_rejects_concatenated_pngs_but_stream_parse_can_read_them(
-        png_suite_dir: Path, tmp_path: Path,
+    png_suite_dir: Path,
+    tmp_path: Path,
 ) -> None:
     first = png_suite_dir.joinpath('basn2c08.png').read_bytes()
     second = png_suite_dir.joinpath('basn0g01.png').read_bytes()
@@ -73,7 +87,8 @@ def test_whole_file_boundary_is_checked_before_pixel_decoding(png_suite_dir: Pat
 
 
 def test_valid_file_and_all_zero_iend_crc_still_report_original_error(
-        png_suite_dir: Path, tmp_path: Path,
+    png_suite_dir: Path,
+    tmp_path: Path,
 ) -> None:
     data = png_suite_dir.joinpath('basn2c08.png').read_bytes()
     path = tmp_path.joinpath('image.png')
@@ -85,11 +100,26 @@ def test_valid_file_and_all_zero_iend_crc_still_report_original_error(
         PngImage.load(path)
 
 
-@pytest.mark.parametrize('name', ['basn0g01.png', 'basn0g16.png', 'basn4a08.png', 'basn4a16.png',
-                                 'basn2c08.png', 'basn2c16.png', 'basn3p01.png', 'basn3p08.png',
-                                 'basn6a08.png', 'basn6a16.png'])
+@pytest.mark.parametrize(
+    'name',
+    [
+        'basn0g01.png',
+        'basn0g16.png',
+        'basn4a08.png',
+        'basn4a16.png',
+        'basn2c08.png',
+        'basn2c16.png',
+        'basn3p01.png',
+        'basn3p08.png',
+        'basn6a08.png',
+        'basn6a16.png',
+    ],
+)
 def test_icc_data_space_matches_all_png_color_types(
-        png_suite_dir: Path, icc_profile_bytes: bytes, gray_icc_profile_bytes: bytes, name: str,
+    png_suite_dir: Path,
+    icc_profile_bytes: bytes,
+    gray_icc_profile_bytes: bytes,
+    name: str,
 ) -> None:
     image = PngImage.load(png_suite_dir.joinpath(name))
     gray = image.header.color_type in (PngColorType.GRAYSCALE, PngColorType.GRAYSCALE_ALPHA)
@@ -119,7 +149,9 @@ def test_raw_and_structured_icc_use_the_same_context_checks(icc_profile_bytes: b
 
 
 def test_document_checks_icc_context_before_pixels_and_preserves_parse_error_type(
-        png_suite_dir: Path, icc_profile_bytes: bytes, monkeypatch,
+    png_suite_dir: Path,
+    icc_profile_bytes: bytes,
+    monkeypatch,
 ) -> None:
     document = PngDocument.load(png_suite_dir.joinpath('basn0g08.png'))
     document.chunks.insert(1, PngIccProfile('RGB', icc_profile_bytes).to_chunk())
@@ -137,11 +169,11 @@ def test_document_checks_icc_context_before_pixels_and_preserves_parse_error_typ
 
 
 def test_higher_color_precedence_does_not_waive_icc_color_type_requirement(
-        png_suite_dir: Path, icc_profile_bytes: bytes,
+    png_suite_dir: Path,
+    icc_profile_bytes: bytes,
 ) -> None:
     image = PngImage.load(png_suite_dir.joinpath('basn6a08.png'))
-    image.metadata = [PngCicp(1, 13), PngSrgb(),
-                      PngIccProfile('Wrong', _icc_with_space(icc_profile_bytes, b'GRAY'))]
+    image.metadata = [PngCicp(1, 13), PngSrgb(), PngIccProfile('Wrong', _icc_with_space(icc_profile_bytes, b'GRAY'))]
     with pytest.raises(PngValidationError, match='color space must match'):
         image.validate()
 
@@ -183,13 +215,14 @@ def test_icc_header_properties_derive_from_current_payload(truncated_icc_profile
 
 
 def test_wpt_truncated_inner_icc_is_preserved_for_inspection_but_not_written(
-        assets_dir: Path, truncated_icc_profile_bytes: bytes,
+    assets_dir: Path,
+    truncated_icc_profile_bytes: bytes,
 ) -> None:
     # The final chad entry ends at 2992, four bytes beyond this WPT payload.
     # Reading keeps the original bytes; the writer must not silently repair them.
     document = PngDocument.load(assets_dir.joinpath('wpt', 'png', 'support', 'cICP-and-iCCP.png'))
     image = PngImage.from_document(document)
-    profile, = image.find_metadata(b'iCCP')
+    (profile,) = image.find_metadata(b'iCCP')
     assert profile.profile == truncated_icc_profile_bytes
     assert profile.declared_size - len(profile.profile) == 4
     with pytest.raises(PngValidationError, match='ICC declared size'):

@@ -11,8 +11,9 @@ def test_defined_h273_code_points_include_unspecified(primaries, transfer):
     PngCicp(primaries, transfer).validate_code_points()
 
 
-@pytest.mark.parametrize(('primaries', 'transfer'), [(0, 1), (3, 1), (13, 1), (21, 1), (23, 1), (255, 1),
-                                                     (1, 0), (1, 3), (1, 19), (1, 255)])
+@pytest.mark.parametrize(
+    ('primaries', 'transfer'), [(0, 1), (3, 1), (13, 1), (21, 1), (23, 1), (255, 1), (1, 0), (1, 3), (1, 19), (1, 255)]
+)
 def test_reserved_h273_values_are_inspectable_but_not_written(png_suite_dir, tmp_path, primaries, transfer):
     image = PngImage.load(png_suite_dir.joinpath('basn2c08.png'))
     image.metadata.append(PngCicp(primaries, transfer))
@@ -27,5 +28,6 @@ def test_reserved_h273_values_are_inspectable_but_not_written(png_suite_dir, tmp
         assert stream.getvalue() == b'unchanged'
         target = tmp_path.joinpath('existing.png')
         target.write_bytes(b'unchanged')
-        with pytest.raises(PngValidationError, match='reserved'): model.save(target)
+        with pytest.raises(PngValidationError, match='reserved'):
+            model.save(target)
         assert target.read_bytes() == b'unchanged'

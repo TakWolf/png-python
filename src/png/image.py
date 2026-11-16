@@ -19,8 +19,13 @@ from png.format import PngColorType, PngFilterType, PngInterlaceMethod
 from png.header import PngHeader
 from png.limits import PngReadLimits
 from png.metadata import (
-    METADATA_TYPES, PngMetadata, PngBackground, PngHistogram, PngSignificantBits,
-    parse_metadata, validate_metadata_chunks,
+    METADATA_TYPES,
+    PngMetadata,
+    PngBackground,
+    PngHistogram,
+    PngSignificantBits,
+    parse_metadata,
+    validate_metadata_chunks,
 )
 
 
@@ -44,15 +49,15 @@ class PngImage:
     _source_ancillary: tuple[tuple[PngChunk | PngMetadata, bytes, bytes, bool], ...] | None
 
     def __init__(
-            self,
-            header: PngHeader,
-            bitmap: list[list[int]] | None = None,
-            palette: list[tuple[int, int, int]] | None = None,
-            transparent_color: tuple[int, ...] | None = None,
-            palette_alpha: list[int] | None = None,
-            animation: PngAnimation | None = None,
-            ancillary_chunks: list[PngChunk] | None = None,
-            metadata: list[PngMetadata] | None = None,
+        self,
+        header: PngHeader,
+        bitmap: list[list[int]] | None = None,
+        palette: list[tuple[int, int, int]] | None = None,
+        transparent_color: tuple[int, ...] | None = None,
+        palette_alpha: list[int] | None = None,
+        animation: PngAnimation | None = None,
+        ancillary_chunks: list[PngChunk] | None = None,
+        metadata: list[PngMetadata] | None = None,
     ) -> None:
         self.header = header
         self.bitmap = bitmap if bitmap is not None else []
@@ -66,9 +71,12 @@ class PngImage:
 
     @staticmethod
     def from_samples(
-            dimensions: tuple[int, int], bitmap: list[list[int]], sample_depth: int | tuple[int, ...],
-            color_type: PngColorType = PngColorType.TRUECOLOR_ALPHA, *,
-            interlace_method: PngInterlaceMethod = PngInterlaceMethod.NONE,
+        dimensions: tuple[int, int],
+        bitmap: list[list[int]],
+        sample_depth: int | tuple[int, ...],
+        color_type: PngColorType = PngColorType.TRUECOLOR_ALPHA,
+        *,
+        interlace_method: PngInterlaceMethod = PngInterlaceMethod.NONE,
     ) -> PngImage:
         """Scale direct-color reference samples to the smallest legal PNG depth.
 
@@ -120,7 +128,9 @@ class PngImage:
                 if is_default:
                     image.animation.default_image_control = control
                 else:
-                    bitmap = decode_pixels(frame_header(header, control.dimensions), (chunk.data[4:] for chunk in blocks))
+                    bitmap = decode_pixels(
+                        frame_header(header, control.dimensions), (chunk.data[4:] for chunk in blocks)
+                    )
                     image.animation.frames.append(PngFrame(control, bitmap))
         before_data = True
         original = []
@@ -133,7 +143,7 @@ class PngImage:
                     image.palette_alpha = list(chunk.data)
                 else:
                     mask = (1 << header.bit_depth) - 1
-                    image.transparent_color = tuple(sample & mask for sample, in iter_unpack('>H', chunk.data))
+                    image.transparent_color = tuple(sample & mask for (sample,) in iter_unpack('>H', chunk.data))
             elif chunk.type == b'IDAT':
                 before_data = False
             elif chunk.type not in (b'acTL', b'fcTL', b'fdAT') and not chunk.is_critical:
@@ -181,18 +191,20 @@ class PngImage:
             raise PngParseError(str(error)) from error
 
     def to_document(
-            self,
-            *,
-            filter_type: PngFilterType | None = None,
-            compression_level: int = 6,
-            idat_chunk_size: int = 65536,
+        self,
+        *,
+        filter_type: PngFilterType | None = None,
+        compression_level: int = 6,
+        idat_chunk_size: int = 65536,
     ) -> PngDocument:
         """Encode an image. None selects adaptive scanline filtering."""
         self.validate()
         check_integer('IDAT chunk size', idat_chunk_size, 1, 0x7FFFFFFF)
         encoded = encode_pixels(self.header, self.bitmap, filter_type, compression_level)
         before, after = [], []
-        entries = [(item, item.to_chunk()) for item in self.metadata] + [(chunk, chunk) for chunk in self.ancillary_chunks]
+        entries = [(item, item.to_chunk()) for item in self.metadata] + [
+            (chunk, chunk) for chunk in self.ancillary_chunks
+        ]
         for entry, chunk in entries:
             after_data = False
             if self._source_ancillary is not None:
@@ -224,18 +236,21 @@ class PngImage:
             if self.animation.default_image_control is not None:
                 chunks.append(self.animation.default_image_control.to_chunk(sequence))
                 sequence += 1
-        chunks.extend(PngChunk(b'IDAT', encoded[offset:offset + idat_chunk_size])
-                      for offset in range(0, len(encoded), idat_chunk_size))
+        chunks.extend(
+            PngChunk(b'IDAT', encoded[offset : offset + idat_chunk_size])
+            for offset in range(0, len(encoded), idat_chunk_size)
+        )
         if self.animation is not None:
             for frame in self.animation.frames:
                 chunks.append(frame.control.to_chunk(sequence))
                 sequence += 1
-                payload = encode_pixels(frame_header(self.header, frame.control.dimensions), frame.bitmap,
-                                        filter_type, compression_level)
+                payload = encode_pixels(
+                    frame_header(self.header, frame.control.dimensions), frame.bitmap, filter_type, compression_level
+                )
                 frame_chunk_size = min(idat_chunk_size, 0x7FFFFFFF - 4)
                 for offset in range(0, len(payload), frame_chunk_size):
                     check_integer('sequence number', sequence, 0, 0x7FFFFFFF)
-                    chunks.append(PngChunk(b'fdAT', pack('>I', sequence) + payload[offset:offset + frame_chunk_size]))
+                    chunks.append(PngChunk(b'fdAT', pack('>I', sequence) + payload[offset : offset + frame_chunk_size]))
                     sequence += 1
         chunks.extend(after)
         chunks.append(PngChunk(b'IEND'))
@@ -250,6 +265,7 @@ class PngImage:
         display transfer functions and HDR tone mapping are separate operations.
         """
         from png._composite import render_frames
+
         self.validate()
         yield from render_frames(self)
 
@@ -265,6 +281,7 @@ class PngImage:
         Returned entries are independent copies, including explicit raw chunks.
         """
         from copy import deepcopy
+
         self.validate()
         understood = set(understood_types)
         color_types = {b'cICP', b'iCCP', b'sRGB', b'gAMA', b'cHRM'}
@@ -303,8 +320,7 @@ class PngImage:
                     frequencies[index] += 1
         maximum = max(frequencies)
         if maximum > 65535:
-            frequencies = [max(1, (value * 65535 + maximum // 2) // maximum) if value else 0
-                           for value in frequencies]
+            frequencies = [max(1, (value * 65535 + maximum // 2) // maximum) if value else 0 for value in frequencies]
         structured = self.find_metadata(b'hIST')
         raw = [chunk for chunk in self.ancillary_chunks if chunk.type == b'hIST']
         if len(structured) + len(raw) > 1:
@@ -320,38 +336,39 @@ class PngImage:
         return result
 
     def dump(
-            self,
-            stream: BinaryIO,
-            *,
-            filter_type: PngFilterType | None = None,
-            compression_level: int = 6,
-            idat_chunk_size: int = 65536,
+        self,
+        stream: BinaryIO,
+        *,
+        filter_type: PngFilterType | None = None,
+        compression_level: int = 6,
+        idat_chunk_size: int = 65536,
     ) -> None:
-        self.to_document(filter_type=filter_type, compression_level=compression_level,
-                         idat_chunk_size=idat_chunk_size).dump(stream)
+        self.to_document(
+            filter_type=filter_type, compression_level=compression_level, idat_chunk_size=idat_chunk_size
+        ).dump(stream)
 
     def dump_to_bytes(
-            self,
-            *,
-            filter_type: PngFilterType | None = None,
-            compression_level: int = 6,
-            idat_chunk_size: int = 65536,
+        self,
+        *,
+        filter_type: PngFilterType | None = None,
+        compression_level: int = 6,
+        idat_chunk_size: int = 65536,
     ) -> bytes:
         stream = BytesIO()
-        self.dump(stream, filter_type=filter_type, compression_level=compression_level,
-                  idat_chunk_size=idat_chunk_size)
+        self.dump(stream, filter_type=filter_type, compression_level=compression_level, idat_chunk_size=idat_chunk_size)
         return stream.getvalue()
 
     def save(
-            self,
-            file_path: str | PathLike[str],
-            *,
-            filter_type: PngFilterType | None = None,
-            compression_level: int = 6,
-            idat_chunk_size: int = 65536,
+        self,
+        file_path: str | PathLike[str],
+        *,
+        filter_type: PngFilterType | None = None,
+        compression_level: int = 6,
+        idat_chunk_size: int = 65536,
     ) -> None:
-        self.to_document(filter_type=filter_type, compression_level=compression_level,
-                         idat_chunk_size=idat_chunk_size).save(file_path)
+        self.to_document(
+            filter_type=filter_type, compression_level=compression_level, idat_chunk_size=idat_chunk_size
+        ).save(file_path)
 
     @property
     def dimensions(self) -> tuple[int, int]:
@@ -414,8 +431,11 @@ class PngImage:
         if len(bitmap) != height:
             raise PngValidationError(f'expected {height} bitmap rows, got {len(bitmap)}')
         samples_per_row = width * self.header.channels
-        max_sample = (len(self.palette) - 1 if self.header.color_type == PngColorType.INDEXED_COLOR
-                      else (1 << self.header.bit_depth) - 1)
+        max_sample = (
+            len(self.palette) - 1
+            if self.header.color_type == PngColorType.INDEXED_COLOR
+            else (1 << self.header.bit_depth) - 1
+        )
         for row in bitmap:
             if len(row) != samples_per_row:
                 raise PngValidationError(f'expected {samples_per_row} samples per row, got {len(row)}')

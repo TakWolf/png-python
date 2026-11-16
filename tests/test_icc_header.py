@@ -17,7 +17,7 @@ def official_profile(assets_dir: Path, request) -> bytes:
 
 def _change(profile: bytes, offset: int, value: bytes, *, clear_id: bool = True) -> bytes:
     result = bytearray(profile)
-    result[offset:offset + len(value)] = value
+    result[offset : offset + len(value)] = value
     if clear_id:
         result[84:100] = bytes(16)
     return bytes(result)
@@ -32,19 +32,31 @@ def test_official_profiles_have_valid_present_ids_and_allow_absent_ids(official_
     assert metadata.profile == official_profile[:84] + bytes(16) + official_profile[100:]
 
 
-@pytest.mark.parametrize(('offset', 'value', 'message'), [
-    (9, b'\xa0', 'version'), (9, b'\x0a', 'version'),
-    (10, b'\0\x01', 'version'), (10, b'\x01\0', 'version'),
-    (20, b'RGB ', 'PCS must'), (20, bytes(4), 'PCS must'),
-    (26, pack('>H', 0), 'date/time'), (26, pack('>H', 13), 'date/time'),
-    (28, pack('>H', 0), 'date/time'), (28, pack('>H', 32), 'date/time'),
-    (30, pack('>H', 24), 'date/time'), (32, pack('>H', 60), 'date/time'),
-    (34, pack('>H', 60), 'date/time'),
-    (64, pack('>I', 4), 'rendering intent'), (64, pack('>I', 65536), 'rendering intent'),
-    (68, pack('>i', 0), 'illuminant'), (72, pack('>i', -65536), 'illuminant'),
-    (76, pack('>i', 54000), 'illuminant'),
-    (100, b'\x01', 'reserved bytes'), (127, b'\x01', 'reserved bytes'),
-])
+@pytest.mark.parametrize(
+    ('offset', 'value', 'message'),
+    [
+        (9, b'\xa0', 'version'),
+        (9, b'\x0a', 'version'),
+        (10, b'\0\x01', 'version'),
+        (10, b'\x01\0', 'version'),
+        (20, b'RGB ', 'PCS must'),
+        (20, bytes(4), 'PCS must'),
+        (26, pack('>H', 0), 'date/time'),
+        (26, pack('>H', 13), 'date/time'),
+        (28, pack('>H', 0), 'date/time'),
+        (28, pack('>H', 32), 'date/time'),
+        (30, pack('>H', 24), 'date/time'),
+        (32, pack('>H', 60), 'date/time'),
+        (34, pack('>H', 60), 'date/time'),
+        (64, pack('>I', 4), 'rendering intent'),
+        (64, pack('>I', 65536), 'rendering intent'),
+        (68, pack('>i', 0), 'illuminant'),
+        (72, pack('>i', -65536), 'illuminant'),
+        (76, pack('>i', 54000), 'illuminant'),
+        (100, b'\x01', 'reserved bytes'),
+        (127, b'\x01', 'reserved bytes'),
+    ],
+)
 def test_icc_header_field_ranges(official_profile: bytes, offset: int, value: bytes, message: str) -> None:
     metadata = PngIccProfile('Header mutation', _change(official_profile, offset, value))
     metadata.validate_profile_structure()
@@ -106,21 +118,26 @@ def test_v4_device_attribute_vendor_bits_are_preserved(assets_dir: Path) -> None
     assert metadata.profile[56:64] == value
 
 
-@pytest.mark.parametrize(('offset', 'values'), [(68, [63187, 63190, 63193]),
-                                                (72, [65533, 65536, 65539]),
-                                                (76, [54058, 54061, 54063])])
+@pytest.mark.parametrize(
+    ('offset', 'values'), [(68, [63187, 63190, 63193]), (72, [65533, 65536, 65539]), (76, [54058, 54061, 54063])]
+)
 def test_d50_is_checked_after_rounding_not_as_a_single_binary_value(
-        official_profile: bytes, offset: int, values: list[int],
+    official_profile: bytes,
+    offset: int,
+    values: list[int],
 ) -> None:
     for value in values:
         metadata = PngIccProfile('Rounded D50', _change(official_profile, offset, pack('>i', value)))
         metadata.validate_profile_tags()
 
 
-@pytest.mark.parametrize(('offset', 'value'), [(68, 63186), (68, 63194), (72, 65532),
-                                               (72, 65540), (76, 54057), (76, 54064)])
+@pytest.mark.parametrize(
+    ('offset', 'value'), [(68, 63186), (68, 63194), (72, 65532), (72, 65540), (76, 54057), (76, 54064)]
+)
 def test_d50_rejects_values_just_outside_the_rounding_interval(
-        official_profile: bytes, offset: int, value: int,
+    official_profile: bytes,
+    offset: int,
+    value: int,
 ) -> None:
     metadata = PngIccProfile('Outside D50', _change(official_profile, offset, pack('>i', value)))
     with pytest.raises(PngValidationError, match='illuminant must round'):
@@ -130,8 +147,11 @@ def test_d50_rejects_values_just_outside_the_rounding_interval(
 @pytest.mark.parametrize('profile_class', [b'link', b'abst'])
 @pytest.mark.parametrize('representation', ['image', 'document'])
 def test_nonembeddable_profile_classes_are_preserved_on_read_but_not_written(
-        icc_profile_bytes: bytes, png_suite_dir: Path, tmp_path: Path,
-        profile_class: bytes, representation: str,
+    icc_profile_bytes: bytes,
+    png_suite_dir: Path,
+    tmp_path: Path,
+    profile_class: bytes,
+    representation: str,
 ) -> None:
     profile = _change(icc_profile_bytes, 12, profile_class)
     image = PngImage.load(png_suite_dir.joinpath('basn2c08.png'))
@@ -154,7 +174,10 @@ def test_nonembeddable_profile_classes_are_preserved_on_read_but_not_written(
 
 @pytest.mark.parametrize('representation', ['image', 'document'])
 def test_stale_profile_id_is_preserved_on_read_but_not_written(
-        official_profile: bytes, png_suite_dir: Path, tmp_path: Path, representation: str,
+    official_profile: bytes,
+    png_suite_dir: Path,
+    tmp_path: Path,
+    representation: str,
 ) -> None:
     profile = _change(official_profile, 4, b'lcms', clear_id=False)
     image = PngImage.load(png_suite_dir.joinpath('basn2c08.png'))

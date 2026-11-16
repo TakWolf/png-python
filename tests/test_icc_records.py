@@ -8,8 +8,11 @@ import pytest
 
 from png import PngDocument, PngIccProfile, PngImage, PngUnsupportedError, PngValidationError
 from png._icc_records import (
-    validate_colorant_context, validate_colorant_table, validate_named_colors,
-    validate_profile_identifiers, validate_profile_sequence,
+    validate_colorant_context,
+    validate_colorant_table,
+    validate_named_colors,
+    validate_profile_identifiers,
+    validate_profile_sequence,
 )
 
 
@@ -19,18 +22,25 @@ def _name(value: bytes) -> bytes:
 
 
 def _colorants(names: tuple[bytes, ...]) -> bytes:
-    return (b'clrt' + bytes(4) + pack('>I', len(names))
-            + b''.join(_name(name) + pack('>3H', 0, 32768, 65535) for name in names))
+    return (
+        b'clrt'
+        + bytes(4)
+        + pack('>I', len(names))
+        + b''.join(_name(name) + pack('>3H', 0, 32768, 65535) for name in names)
+    )
 
 
-@pytest.mark.parametrize('names', [(), (b'',), (b'Black',), (b'Red', b'Green', b'Blue'),
-                                 (b'A' * 31,), (b'Gray', b'gray'), (b'Tab\tName',)])
+@pytest.mark.parametrize(
+    'names', [(), (b'',), (b'Black',), (b'Red', b'Green', b'Blue'), (b'A' * 31,), (b'Gray', b'gray'), (b'Tab\tName',)]
+)
 def test_colorant_table_names_and_exact_record_sizes(names: tuple[bytes, ...]) -> None:
     validate_colorant_table(_colorants(names))
 
 
-@pytest.mark.parametrize('damage', ['short_header', 'reserved', 'count', 'truncated', 'extra',
-                                   'unterminated', 'ascii', 'unused', 'duplicate'])
+@pytest.mark.parametrize(
+    'damage',
+    ['short_header', 'reserved', 'count', 'truncated', 'extra', 'unterminated', 'ascii', 'unused', 'duplicate'],
+)
 def test_colorant_table_bad_names_and_counts(damage: str) -> None:
     data = _colorants((b'Red', b'Green', b'Blue'))
     if damage == 'short_header':
@@ -55,22 +65,30 @@ def test_colorant_table_bad_names_and_counts(damage: str) -> None:
         validate_colorant_table(data)
 
 
-@pytest.mark.parametrize(('signature', 'device', 'pcs', 'profile_class', 'count', 'valid'), [
-    (b'clrt', b'RGB ', b'XYZ ', b'mntr', 3, True),
-    (b'clrt', b'GRAY', b'XYZ ', b'mntr', 1, True),
-    (b'clrt', b'CMYK', b'Lab ', b'prtr', 4, True),
-    (b'clrt', b'FCLR', b'Lab ', b'prtr', 15, True),
-    (b'clrt', b'RGB ', b'XYZ ', b'mntr', 0, False),
-    (b'clrt', b'RGB ', b'XYZ ', b'mntr', 2, False),
-    (b'clrt', b'GRAY', b'XYZ ', b'mntr', 3, False),
-    (b'clrt', b'GRAY', b'RGB ', b'link', 1, True),
-    (b'clot', b'GRAY', b'RGB ', b'link', 3, True),
-    (b'clot', b'GRAY', b'RGB ', b'link', 1, False),
-    (b'clot', b'RGB ', b'GRAY', b'link', 1, True),
-    (b'clot', b'RGB ', b'XYZ ', b'mntr', 3, False),
-])
+@pytest.mark.parametrize(
+    ('signature', 'device', 'pcs', 'profile_class', 'count', 'valid'),
+    [
+        (b'clrt', b'RGB ', b'XYZ ', b'mntr', 3, True),
+        (b'clrt', b'GRAY', b'XYZ ', b'mntr', 1, True),
+        (b'clrt', b'CMYK', b'Lab ', b'prtr', 4, True),
+        (b'clrt', b'FCLR', b'Lab ', b'prtr', 15, True),
+        (b'clrt', b'RGB ', b'XYZ ', b'mntr', 0, False),
+        (b'clrt', b'RGB ', b'XYZ ', b'mntr', 2, False),
+        (b'clrt', b'GRAY', b'XYZ ', b'mntr', 3, False),
+        (b'clrt', b'GRAY', b'RGB ', b'link', 1, True),
+        (b'clot', b'GRAY', b'RGB ', b'link', 3, True),
+        (b'clot', b'GRAY', b'RGB ', b'link', 1, False),
+        (b'clot', b'RGB ', b'GRAY', b'link', 1, True),
+        (b'clot', b'RGB ', b'XYZ ', b'mntr', 3, False),
+    ],
+)
 def test_colorant_table_context_uses_the_correct_side(
-        signature: bytes, device: bytes, pcs: bytes, profile_class: bytes, count: int, valid: bool,
+    signature: bytes,
+    device: bytes,
+    pcs: bytes,
+    profile_class: bytes,
+    count: int,
+    valid: bool,
 ) -> None:
     # Context-only header vectors, not complete color profiles.
     header = bytearray(128)
@@ -100,15 +118,28 @@ def test_v4_colorant_context_is_checked_within_full_profile(assets_dir: Path, ta
 
 
 def _named(coordinates: int = 3, names: tuple[bytes, ...] = (b'Red', b'Blue')) -> bytes:
-    return (b'ncl2' + bytes(4) + pack('>III', 0xA5000000, len(names), coordinates)
-            + _name(b'Prefix ') + _name(b' Suffix')
-            + b''.join(_name(name) + pack('>3H', 0, 32768, 65535) + bytes(2 * coordinates) for name in names))
+    return (
+        b'ncl2'
+        + bytes(4)
+        + pack('>III', 0xA5000000, len(names), coordinates)
+        + _name(b'Prefix ')
+        + _name(b' Suffix')
+        + b''.join(_name(name) + pack('>3H', 0, 32768, 65535) + bytes(2 * coordinates) for name in names)
+    )
 
 
 def _description(text: bytes = b'', *, unicode_text: bool = False) -> bytes:
     encoded = (text.decode('ascii') + '\0').encode('utf-16-be') if unicode_text else b''
-    return (b'desc' + bytes(4) + pack('>I', len(text) + 1) + text + bytes(1)
-            + pack('>II', 0, len(encoded) // 2) + encoded + bytes(70))
+    return (
+        b'desc'
+        + bytes(4)
+        + pack('>I', len(text) + 1)
+        + text
+        + bytes(1)
+        + pack('>II', 0, len(encoded) // 2)
+        + encoded
+        + bytes(70)
+    )
 
 
 def _localized(text: str | None = None, *, shared: bool = False) -> bytes:
@@ -126,8 +157,13 @@ def _sequence(records: list[tuple[bytes, bytes]]) -> bytes:
     return b'pseq' + bytes(4) + pack('>I', len(records)) + b''.join(fixed + maker + model for maker, model in records)
 
 
-def _identifiers(descriptions: tuple[bytes, ...], *, order: tuple[int, ...] | None = None,
-                 identifier: bytes = bytes(range(16)), padding: bool = True) -> bytes:
+def _identifiers(
+    descriptions: tuple[bytes, ...],
+    *,
+    order: tuple[int, ...] | None = None,
+    identifier: bytes = bytes(range(16)),
+    padding: bool = True,
+) -> bytes:
     if order is None:
         order = tuple(range(len(descriptions)))
     positions = []
@@ -141,12 +177,17 @@ def _identifiers(descriptions: tuple[bytes, ...], *, order: tuple[int, ...] | No
         count = -positions[-1][1] % 4
         if count:
             del body[-count:]
-    return (b'psid' + bytes(4) + pack('>I', len(order))
-            + b''.join(pack('>II', *positions[index]) for index in order) + bytes(body))
+    return (
+        b'psid'
+        + bytes(4)
+        + pack('>I', len(order))
+        + b''.join(pack('>II', *positions[index]) for index in order)
+        + bytes(body)
+    )
 
 
 def _u32(data: bytes, offset: int, value: int) -> bytes:
-    return data[:offset] + pack('>I', value) + data[offset + 4:]
+    return data[:offset] + pack('>I', value) + data[offset + 4 :]
 
 
 @pytest.mark.parametrize('coordinates', [0, 1, 3, 15])
@@ -162,12 +203,23 @@ def test_named_colors_preserve_flag_bits_special_ascii_and_unused_name_bytes() -
     validate_named_colors(data)
 
 
-@pytest.mark.parametrize(('offset', 'damage'), [
-    (0, 'header'), (4, 'reserved'), (12, 'count'), (16, 'coordinates'),
-    (20, 'terminator'), (52, 'terminator'), (84, 'terminator'),
-    (20, 'high_bit'), (52, 'high_bit'), (84, 'high_bit'),
-    (0, 'short_record'), (0, 'extra_record'),
-])
+@pytest.mark.parametrize(
+    ('offset', 'damage'),
+    [
+        (0, 'header'),
+        (4, 'reserved'),
+        (12, 'count'),
+        (16, 'coordinates'),
+        (20, 'terminator'),
+        (52, 'terminator'),
+        (84, 'terminator'),
+        (20, 'high_bit'),
+        (52, 'high_bit'),
+        (84, 'high_bit'),
+        (0, 'short_record'),
+        (0, 'extra_record'),
+    ],
+)
 def test_named_color_bad_sizes_and_name_fields(offset: int, damage: str) -> None:
     data = _named()
     if damage == 'header':
@@ -177,9 +229,9 @@ def test_named_color_bad_sizes_and_name_fields(offset: int, damage: str) -> None
     elif damage in ('count', 'coordinates'):
         data = _u32(data, offset, 0xFFFFFFFF)
     elif damage == 'terminator':
-        data = data[:offset] + b'A' * 32 + data[offset + 32:]
+        data = data[:offset] + b'A' * 32 + data[offset + 32 :]
     elif damage == 'high_bit':
-        data = data[:offset] + b'\x80' + data[offset + 1:]
+        data = data[:offset] + b'\x80' + data[offset + 1 :]
     elif damage == 'short_record':
         data = data[:-1]
     else:
@@ -188,21 +240,40 @@ def test_named_color_bad_sizes_and_name_fields(offset: int, damage: str) -> None
         validate_named_colors(data)
 
 
-@pytest.mark.parametrize('records', [
-    [], [(_description(), _description())], [(_localized(), _localized())],
-    [(_description(b'A'), _localized('B'))], [(_localized('A'), _description(b'B'))],
-    [(_localized('A', shared=True), _localized('PNG\U0001f600'))],
-    [(_description(b'Maker', unicode_text=True), _description(b'Model', unicode_text=True))],
-    [(_description(b'One'), _description(b'Two')), (_localized('Three'), _localized())],
-])
+@pytest.mark.parametrize(
+    'records',
+    [
+        [],
+        [(_description(), _description())],
+        [(_localized(), _localized())],
+        [(_description(b'A'), _localized('B'))],
+        [(_localized('A'), _description(b'B'))],
+        [(_localized('A', shared=True), _localized('PNG\U0001f600'))],
+        [(_description(b'Maker', unicode_text=True), _description(b'Model', unicode_text=True))],
+        [(_description(b'One'), _description(b'Two')), (_localized('Three'), _localized())],
+    ],
+)
 def test_profile_sequence_embedded_text_types_and_unaligned_boundaries(records: list[tuple[bytes, bytes]]) -> None:
     # No padding is inserted between descriptions or records, even at odd offsets.
     validate_profile_sequence(_sequence(records))
 
 
-@pytest.mark.parametrize('damage', ['header', 'reserved', 'count', 'fixed_header', 'missing_model',
-                                    'description_reserved', 'ascii_count', 'ascii_terminator',
-                                    'unicode_count', 'script_count', 'extra_bytes'])
+@pytest.mark.parametrize(
+    'damage',
+    [
+        'header',
+        'reserved',
+        'count',
+        'fixed_header',
+        'missing_model',
+        'description_reserved',
+        'ascii_count',
+        'ascii_terminator',
+        'unicode_count',
+        'script_count',
+        'extra_bytes',
+    ],
+)
 def test_profile_sequence_legacy_description_bounds(damage: str) -> None:
     data = _sequence([(_description(), _description())])
     if damage == 'header':
@@ -258,12 +329,16 @@ def test_profile_sequence_unknown_description_encoding_is_reported() -> None:
         validate_profile_sequence(data)
 
 
-@pytest.mark.parametrize('descriptions', [(), (_localized(),), (_localized('A'),),
-                                        (_localized('Model', shared=True), _localized('PNG\U0001f600'))])
+@pytest.mark.parametrize(
+    'descriptions',
+    [(), (_localized(),), (_localized('A'),), (_localized('Model', shared=True), _localized('PNG\U0001f600'))],
+)
 @pytest.mark.parametrize('padding', [False, True])
 @pytest.mark.parametrize('identifier', [bytes(16), bytes(range(16))])
 def test_profile_identifier_records_and_optional_final_padding(
-        descriptions: tuple[bytes, ...], padding: bool, identifier: bytes,
+    descriptions: tuple[bytes, ...],
+    padding: bool,
+    identifier: bytes,
 ) -> None:
     validate_profile_identifiers(_identifiers(descriptions, identifier=identifier, padding=padding))
 
@@ -280,10 +355,29 @@ def test_profile_identifier_multilingual_extended_stride() -> None:
     validate_profile_identifiers(_identifiers((description,)))
 
 
-@pytest.mark.parametrize('damage', ['header', 'reserved', 'count', 'table', 'offset_table', 'offset_unaligned',
-                                    'offset_outside', 'size_short', 'size_cut', 'size_outside', 'description_type',
-                                    'description_reserved', 'description_count', 'description_stride',
-                                    'string_offset', 'string_odd_length', 'string_utf16', 'padding'])
+@pytest.mark.parametrize(
+    'damage',
+    [
+        'header',
+        'reserved',
+        'count',
+        'table',
+        'offset_table',
+        'offset_unaligned',
+        'offset_outside',
+        'size_short',
+        'size_cut',
+        'size_outside',
+        'description_type',
+        'description_reserved',
+        'description_count',
+        'description_stride',
+        'string_offset',
+        'string_odd_length',
+        'string_utf16',
+        'padding',
+    ],
+)
 def test_profile_identifier_position_and_description_errors(damage: str) -> None:
     data = _identifiers((_localized('A'),))
     offset, size = unpack_from('>II', data, 12)
@@ -309,7 +403,7 @@ def test_profile_identifier_position_and_description_errors(damage: str) -> None
     elif damage == 'size_outside':
         data = _u32(data, 16, 0xFFFFFFFF)
     elif damage == 'description_type':
-        data = data[:description] + b'desc' + data[description + 4:]
+        data = data[:description] + b'desc' + data[description + 4 :]
     elif damage == 'description_reserved':
         data = _u32(data, description + 4, 1)
     elif damage == 'description_count':
@@ -321,9 +415,9 @@ def test_profile_identifier_position_and_description_errors(damage: str) -> None
     elif damage == 'string_odd_length':
         data = _u32(data, description + 20, 1)
     elif damage == 'string_utf16':
-        data = data[:offset + size - 2] + b'\xd8\0' + data[offset + size:]
+        data = data[: offset + size - 2] + b'\xd8\0' + data[offset + size :]
     else:
-        data = data[:offset + size] + b'\x01' + data[offset + size + 1:]
+        data = data[: offset + size] + b'\x01' + data[offset + size + 1 :]
     with pytest.raises(PngValidationError, match='ICC'):
         validate_profile_identifiers(data)
 
@@ -331,7 +425,7 @@ def test_profile_identifier_position_and_description_errors(damage: str) -> None
 def test_profile_identifier_strings_cannot_escape_into_another_record() -> None:
     data = _identifiers((_localized('First'), _localized('Second')))
     first_offset, first_size = unpack_from('>II', data, 12)
-    second_offset, = unpack_from('>I', data, 20)
+    (second_offset,) = unpack_from('>I', data, 20)
     # Point at the second record's valid string, still within the whole psid.
     target = second_offset + 16 + 28
     description = first_offset + 16
@@ -345,23 +439,23 @@ def test_profile_identifier_strings_cannot_escape_into_another_record() -> None:
 def test_profile_identifiers_require_padding_between_stored_records() -> None:
     data = _identifiers((_localized('One'), _localized('Second')), identifier=bytes(16))
     offset, size = unpack_from('>II', data, 12)
-    second_offset, = unpack_from('>I', data, 20)
+    (second_offset,) = unpack_from('>I', data, 20)
     assert second_offset - (offset + size) == 2
     # This packed layout was independently observed in a local LittleCMS
     # writer. ICC.1:2022 10.20 explicitly requires aligned record starts.
-    packed = data[:offset + size] + data[second_offset:]
+    packed = data[: offset + size] + data[second_offset:]
     packed = _u32(packed, 20, offset + size)
     with pytest.raises(PngValidationError, match='psid record offset'):
         validate_profile_identifiers(packed)
-    bad_padding = data[:offset + size] + b'\1' + data[offset + size + 1:]
+    bad_padding = data[: offset + size] + b'\1' + data[offset + size + 1 :]
     with pytest.raises(PngValidationError, match='psid record alignment padding'):
         validate_profile_identifiers(bad_padding)
 
 
 def _with_record(profile: bytes, tag: bytes, payload: bytes) -> bytes:
-    count, = unpack_from('>I', profile, 128)
+    (count,) = unpack_from('>I', profile, 128)
     entries = [unpack_from('>4sII', profile, 132 + 12 * index) for index in range(count)]
-    tags = [(kind, profile[offset:offset + size]) for kind, offset, size in entries] + [(tag, payload)]
+    tags = [(kind, profile[offset : offset + size]) for kind, offset, size in entries] + [(tag, payload)]
     table = bytearray()
     body = bytearray()
     for kind, value in tags:
@@ -405,8 +499,12 @@ def test_private_tag_with_identifier_type_checks_its_records(icc_profile_bytes: 
 @pytest.mark.parametrize('tag', [b'ncl2', b'pseq', b'psid', b'clrt'])
 @pytest.mark.parametrize('damaged', [False, True])
 def test_icc_record_roundtrip_and_write_protection(
-        icc_profile_bytes: bytes, png_suite_dir: Path, tmp_path: Path,
-        representation: str, tag: bytes, damaged: bool,
+    icc_profile_bytes: bytes,
+    png_suite_dir: Path,
+    tmp_path: Path,
+    representation: str,
+    tag: bytes,
+    damaged: bool,
 ) -> None:
     payload = _named() if tag == b'ncl2' else _sequence([(_description(), _localized('Model'))])
     if tag == b'psid':

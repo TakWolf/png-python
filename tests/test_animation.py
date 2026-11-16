@@ -9,16 +9,30 @@ from struct import pack, unpack
 import pytest
 
 from png import (
-    PngAnimation, PngBlendOp, PngChunk, PngColorType, PngDisposeOp, PngDocument,
-    PngFilterType, PngFrame, PngFrameControl, PngHeader, PngImage,
-    PngInterlaceMethod, PngParseError, PngValidationError,
+    PngAnimation,
+    PngBlendOp,
+    PngChunk,
+    PngColorType,
+    PngDisposeOp,
+    PngDocument,
+    PngFilterType,
+    PngFrame,
+    PngFrameControl,
+    PngHeader,
+    PngImage,
+    PngInterlaceMethod,
+    PngParseError,
+    PngValidationError,
 )
 
 _WPT_ROOT = Path(__file__).parents[1].joinpath('assets', 'wpt')
 _APNG_ROOT = _WPT_ROOT.joinpath('png', 'apng')
 _ANIMATED = sorted(path.name for path in _APNG_ROOT.joinpath('support').glob('[0-9]*.png'))
-_VISUAL = sorted(path.name for path in _APNG_ROOT.glob('*.html')
-                 if 'rel="match"' in path.read_text() and path.name != 'fDAT-inherits-cICP.html')
+_VISUAL = sorted(
+    path.name
+    for path in _APNG_ROOT.glob('*.html')
+    if 'rel="match"' in path.read_text() and path.name != 'fDAT-inherits-cICP.html'
+)
 _BASIC = sorted(path.name for path in Path(__file__).parents[1].joinpath('assets', 'png-suite').glob('basn*.png'))
 
 
@@ -60,7 +74,7 @@ def _visible_rgba8(image: PngImage) -> list[list[int]]:
     for row in image.bitmap:
         target = []
         for index in range(0, len(row), 4):
-            pixel = [(value * 255 + maximum // 2) // maximum for value in row[index:index + 4]]
+            pixel = [(value * 255 + maximum // 2) // maximum for value in row[index : index + 4]]
             if pixel[3] == 0:
                 pixel[:3] = [0, 0, 0]  # Invisible RGB values are not a visual difference.
             target.extend(pixel)
@@ -71,8 +85,8 @@ def _visible_rgba8(image: PngImage) -> list[list[int]]:
 @pytest.mark.parametrize('name', _VISUAL)
 def test_wpt_final_state_matches_official_reference(name: str) -> None:
     html = _APNG_ROOT.joinpath(name).read_text()
-    source, = re.findall(r'src="(support/[^"]+\.png)"', html)
-    reference, = re.findall(r'rel="match" href="([^"]+)"', html)
+    (source,) = re.findall(r'src="(support/[^"]+\.png)"', html)
+    (reference,) = re.findall(r'rel="match" href="([^"]+)"', html)
     image = PngImage.load(_APNG_ROOT.joinpath(source))
     last = None
     for frame in image.render_frames():
@@ -98,7 +112,7 @@ def test_color_metadata_inherited_by_rendered_frame() -> None:
 def test_static_rgba_snapshot_preserves_official_pixel_dimensions(png_suite_dir: Path, name: str) -> None:
     image = PngImage.load(png_suite_dir.joinpath(name))
     expected = image.to_document().find_chunks(b'pHYs')[0].data
-    rendered, = image.render_frames()
+    (rendered,) = image.render_frames()
     assert rendered.image.dimensions == image.dimensions
     assert rendered.image.to_document().find_chunks(b'pHYs')[0].data == expected
     restored = PngImage.parse(rendered.image.dump_to_bytes())
@@ -109,7 +123,7 @@ def test_static_rgba_snapshot_preserves_official_pixel_dimensions(png_suite_dir:
 def test_apng_snapshots_inherit_pixel_dimensions_without_resampling(png_suite_dir: Path, as_raw: bool) -> None:
     image = PngImage.load(_APNG_ROOT.joinpath('support', '007.png'))
     baseline = [frame.image.bitmap for frame in image.render_frames()]
-    physical, = PngImage.load(png_suite_dir.joinpath('cdhn2c08.png')).find_metadata(b'pHYs')
+    (physical,) = PngImage.load(png_suite_dir.joinpath('cdhn2c08.png')).find_metadata(b'pHYs')
     original_bytes = physical.to_chunk().data
     if as_raw:
         original = physical.to_chunk()
@@ -130,7 +144,7 @@ def test_apng_snapshots_inherit_pixel_dimensions_without_resampling(png_suite_di
         copied.data = bytes(9)
         assert original.data == original_bytes
     else:
-        copied, = rendered[0].image.find_metadata(b'pHYs')
+        (copied,) = rendered[0].image.find_metadata(b'pHYs')
         assert copied is not original
         copied.pixels_per_unit_x = 99
         assert original.to_chunk().data == original_bytes
@@ -138,14 +152,15 @@ def test_apng_snapshots_inherit_pixel_dimensions_without_resampling(png_suite_di
 
 
 def test_gray_snapshot_preserves_pixel_dimensions_when_it_omits_gray_icc(
-        png_suite_dir: Path, gray_icc_profile_bytes: bytes,
+    png_suite_dir: Path,
+    gray_icc_profile_bytes: bytes,
 ) -> None:
     from png import PngIccProfile
 
     image = PngImage.load(png_suite_dir.joinpath('basn0g04.png'))
-    physical, = PngImage.load(png_suite_dir.joinpath('cdfn2c08.png')).find_metadata(b'pHYs')
+    (physical,) = PngImage.load(png_suite_dir.joinpath('cdfn2c08.png')).find_metadata(b'pHYs')
     image.metadata.extend([physical, PngIccProfile('Gray model', gray_icc_profile_bytes)])
-    rendered, = image.render_frames()
+    (rendered,) = image.render_frames()
     assert rendered.image.header.color_type == PngColorType.TRUECOLOR_ALPHA
     assert not rendered.image.find_metadata(b'iCCP')
     assert rendered.image.find_metadata(b'pHYs')[0].to_chunk().data == physical.to_chunk().data
@@ -159,10 +174,11 @@ def test_animation_encoding_all_sample_formats(png_suite_dir: Path, name: str, i
     image.header.dimensions = (2, 1)
     image.header.interlace_method = interlace
     channels = image.header.channels
-    image.bitmap = [image.bitmap[0][:2 * channels]]
+    image.bitmap = [image.bitmap[0][: 2 * channels]]
     image.animation = PngAnimation(
-        frames=[PngFrame(PngFrameControl((1, 1), offset=(1, 0), delay_num=3, delay_den=0),
-                         [image.bitmap[0][channels:]])],
+        frames=[
+            PngFrame(PngFrameControl((1, 1), offset=(1, 0), delay_num=3, delay_den=0), [image.bitmap[0][channels:]])
+        ],
         default_image_control=None if poster else PngFrameControl((2, 1), delay_num=1, delay_den=60),
         num_plays=2,
     )
@@ -171,14 +187,20 @@ def test_animation_encoding_all_sample_formats(png_suite_dir: Path, name: str, i
     assert restored.animation.frames[0].bitmap == image.animation.frames[0].bitmap
     assert restored.animation.frames[0].control.delay_den == 0
     assert restored.animation.frames[0].control.delay == Fraction(3, 100)
-    assert [frame.image.bitmap for frame in restored.render_frames()] == [frame.image.bitmap for frame in image.render_frames()]
+    assert [frame.image.bitmap for frame in restored.render_frames()] == [
+        frame.image.bitmap for frame in image.render_frames()
+    ]
 
 
 def _animation_image(default: bool = True) -> PngImage:
-    return PngImage(PngHeader((2, 1)), [[255, 0, 0, 255, 255, 0, 0, 255]], animation=PngAnimation(
-        default_image_control=PngFrameControl((2, 1)) if default else None,
-        frames=[PngFrame(PngFrameControl((1, 1), offset=(1, 0)), [[0, 255, 0, 128]])],
-    ))
+    return PngImage(
+        PngHeader((2, 1)),
+        [[255, 0, 0, 255, 255, 0, 0, 255]],
+        animation=PngAnimation(
+            default_image_control=PngFrameControl((2, 1)) if default else None,
+            frames=[PngFrame(PngFrameControl((1, 1), offset=(1, 0)), [[0, 255, 0, 128]])],
+        ),
+    )
 
 
 def test_poster_does_not_seed_animation_canvas() -> None:
@@ -210,26 +232,34 @@ def test_snapshots_are_independent_and_rendering_restarts() -> None:
 
 
 def test_16_bit_composition_retains_low_bits() -> None:
-    image = PngImage(PngHeader((1, 1), bit_depth=16), [[0x1234, 0x2345, 0x3456, 0xFFFF]],
-                     animation=PngAnimation(default_image_control=PngFrameControl((1, 1))))
+    image = PngImage(
+        PngHeader((1, 1), bit_depth=16),
+        [[0x1234, 0x2345, 0x3456, 0xFFFF]],
+        animation=PngAnimation(default_image_control=PngFrameControl((1, 1))),
+    )
     rendered = next(image.render_frames())
     assert rendered.image.header.bit_depth == 16
     assert rendered.image.bitmap == image.bitmap
     assert rendered.delay == Fraction(1, 10)
 
 
-@pytest.mark.parametrize(('depth', 'half', 'expected'), [
-    (8, 128, [85, 0, 170, 192]),
-    (16, 32768, [21845, 0, 43690, 49152]),
-])
+@pytest.mark.parametrize(
+    ('depth', 'half', 'expected'),
+    [
+        (8, 128, [85, 0, 170, 192]),
+        (16, 32768, [21845, 0, 43690, 49152]),
+    ],
+)
 def test_over_with_translucent_destination(depth: int, half: int, expected: list[int]) -> None:
     maximum = (1 << depth) - 1
-    image = PngImage(PngHeader((1, 1), bit_depth=depth), [[maximum, 0, 0, half]],
-                     animation=PngAnimation(
-                         default_image_control=PngFrameControl((1, 1)),
-                         frames=[PngFrame(PngFrameControl((1, 1), blend_op=PngBlendOp.OVER),
-                                          [[0, 0, maximum, half]])],
-                     ))
+    image = PngImage(
+        PngHeader((1, 1), bit_depth=depth),
+        [[maximum, 0, 0, half]],
+        animation=PngAnimation(
+            default_image_control=PngFrameControl((1, 1)),
+            frames=[PngFrame(PngFrameControl((1, 1), blend_op=PngBlendOp.OVER), [[0, 0, maximum, half]])],
+        ),
+    )
     assert list(image.render_frames())[-1].image.bitmap == [expected]
 
 
@@ -238,7 +268,7 @@ def test_raw_apng_rechunking_preserves_animation() -> None:
     document = PngDocument.parse(source)
     index = next(index for index, chunk in enumerate(document.chunks) if chunk.type == b'IDAT')
     original = document.chunks[index].data
-    document.chunks[index:index + 1] = [PngChunk(b'IDAT', original[:1]), PngChunk(b'IDAT', original[1:])]
+    document.chunks[index : index + 1] = [PngChunk(b'IDAT', original[:1]), PngChunk(b'IDAT', original[1:])]
     restored = PngImage.parse(document.dump_to_bytes())
     assert restored.animation.num_frames == 2
     assert restored.bitmap == _animation_image().bitmap
@@ -252,7 +282,23 @@ def test_animation_sequence_and_empty_data_parts() -> None:
     assert sequence == list(range(len(sequence)))
 
 
-@pytest.mark.parametrize('damage', ['no_actl', 'zero_frames', 'count', 'plays', 'gap', 'duplicate', 'missing_data', 'fdAT_before_control', 'default_size', 'bounds', 'bad_disposal', 'bad_blend'])
+@pytest.mark.parametrize(
+    'damage',
+    [
+        'no_actl',
+        'zero_frames',
+        'count',
+        'plays',
+        'gap',
+        'duplicate',
+        'missing_data',
+        'fdAT_before_control',
+        'default_size',
+        'bounds',
+        'bad_disposal',
+        'bad_blend',
+    ],
+)
 def test_invalid_animation_envelopes(damage: str) -> None:
     document = _animation_image().to_document()
     controls = document.find_chunks(b'fcTL')

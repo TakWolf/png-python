@@ -68,8 +68,9 @@ class PngChromaticities(PngMetadata):
     green: tuple[int, int]
     blue: tuple[int, int]
 
-    def __init__(self, white_point: tuple[int, int], red: tuple[int, int],
-                 green: tuple[int, int], blue: tuple[int, int]) -> None:
+    def __init__(
+        self, white_point: tuple[int, int], red: tuple[int, int], green: tuple[int, int], blue: tuple[int, int]
+    ) -> None:
         self.white_point = white_point
         self.red = red
         self.green = green
@@ -119,8 +120,9 @@ class PngCicp(PngMetadata):
     matrix_coefficients: int
     video_full_range_flag: int
 
-    def __init__(self, color_primaries: int, transfer_function: int,
-                 matrix_coefficients: int = 0, video_full_range_flag: int = 1) -> None:
+    def __init__(
+        self, color_primaries: int, transfer_function: int, matrix_coefficients: int = 0, video_full_range_flag: int = 1
+    ) -> None:
         self.color_primaries = color_primaries
         self.transfer_function = transfer_function
         self.matrix_coefficients = matrix_coefficients
@@ -137,15 +139,19 @@ class PngCicp(PngMetadata):
         check_integer('transfer function', self.transfer_function, 0, 255)
         check_integer('matrix coefficients', self.matrix_coefficients, 0, 0)
         check_integer('full range flag', self.video_full_range_flag, 0, 1)
-        return PngChunk(self.type, bytes((self.color_primaries, self.transfer_function,
-                                         self.matrix_coefficients, self.video_full_range_flag)))
+        return PngChunk(
+            self.type,
+            bytes((self.color_primaries, self.transfer_function, self.matrix_coefficients, self.video_full_range_flag)),
+        )
 
     def validate_code_points(self) -> None:
         """Reject reserved H.273 (07/2024) code points without changing fields."""
         from png._color_codes import validate_code_points
+
         self.validate()
-        validate_code_points(self.color_primaries, self.transfer_function,
-                             self.matrix_coefficients, self.video_full_range_flag)
+        validate_code_points(
+            self.color_primaries, self.transfer_function, self.matrix_coefficients, self.video_full_range_flag
+        )
 
 
 class PngMasteringDisplayColorVolume(PngMetadata):
@@ -157,8 +163,15 @@ class PngMasteringDisplayColorVolume(PngMetadata):
     maximum_luminance: int
     minimum_luminance: int
 
-    def __init__(self, red: tuple[int, int], green: tuple[int, int], blue: tuple[int, int],
-                 white_point: tuple[int, int], maximum_luminance: int, minimum_luminance: int) -> None:
+    def __init__(
+        self,
+        red: tuple[int, int],
+        green: tuple[int, int],
+        blue: tuple[int, int],
+        white_point: tuple[int, int],
+        maximum_luminance: int,
+        minimum_luminance: int,
+    ) -> None:
         self.red = red
         self.green = green
         self.blue = blue
@@ -204,7 +217,9 @@ class PngContentLightLevel(PngMetadata):
     def to_chunk(self) -> PngChunk:
         check_integer('MaxCLL times 10000', self.maximum_content_light_level, 0, 0x7FFFFFFF)
         check_integer('MaxFALL times 10000', self.maximum_frame_average_light_level, 0, 0x7FFFFFFF)
-        return PngChunk(self.type, pack('>2I', self.maximum_content_light_level, self.maximum_frame_average_light_level))
+        return PngChunk(
+            self.type, pack('>2I', self.maximum_content_light_level, self.maximum_frame_average_light_level)
+        )
 
 
 class PngIccProfile(PngMetadata):
@@ -315,8 +330,9 @@ class PngInternationalText(PngMetadata):
     translated_keyword: str
     compressed: bool
 
-    def __init__(self, keyword: str, text: str, language_tag: str = '',
-                 translated_keyword: str = '', compressed: bool = False) -> None:
+    def __init__(
+        self, keyword: str, text: str, language_tag: str = '', translated_keyword: str = '', compressed: bool = False
+    ) -> None:
         self.keyword = keyword
         self.text = text
         self.language_tag = language_tag
@@ -338,8 +354,13 @@ class PngInternationalText(PngMetadata):
             raise PngValidationError('iTXt is missing language or translated-keyword separators')
         language, translated, text = parts
         budget.metadata(chunk.length - len(text) if compressed else chunk.length)
-        result = PngInternationalText(keyword, _decode(_inflate(text, budget) if compressed else text, 'utf-8'),
-                                      _decode(language, 'ascii'), _decode(translated, 'utf-8'), compressed)
+        result = PngInternationalText(
+            keyword,
+            _decode(_inflate(text, budget) if compressed else text, 'utf-8'),
+            _decode(language, 'ascii'),
+            _decode(translated, 'utf-8'),
+            compressed,
+        )
         result.validate()
         return result
 
@@ -351,8 +372,16 @@ class PngInternationalText(PngMetadata):
         text = _string(self.text, 'utf-8')
         if self.compressed:
             text = zlib.compress(text)
-        data = (_keyword(self.keyword) + b'\0' + bytes((self.compressed, 0)) + language + b'\0' +
-                _string(self.translated_keyword, 'utf-8') + b'\0' + text)
+        data = (
+            _keyword(self.keyword)
+            + b'\0'
+            + bytes((self.compressed, 0))
+            + language
+            + b'\0'
+            + _string(self.translated_keyword, 'utf-8')
+            + b'\0'
+            + text
+        )
         return PngChunk(self.type, data)
 
 
@@ -362,8 +391,9 @@ class PngPhysicalDimensions(PngMetadata):
     pixels_per_unit_y: int
     unit: PngPhysicalUnit
 
-    def __init__(self, pixels_per_unit_x: int, pixels_per_unit_y: int,
-                 unit: PngPhysicalUnit = PngPhysicalUnit.UNKNOWN) -> None:
+    def __init__(
+        self, pixels_per_unit_x: int, pixels_per_unit_y: int, unit: PngPhysicalUnit = PngPhysicalUnit.UNKNOWN
+    ) -> None:
         self.pixels_per_unit_x = pixels_per_unit_x
         self.pixels_per_unit_y = pixels_per_unit_y
         self.unit = unit
@@ -459,7 +489,7 @@ class PngBackground(PngMetadata):
             return PngBackground(palette_index=data[0])
         if len(data) not in (2, 6):
             raise PngValidationError('bKGD must contain a palette index, grayscale sample or RGB samples')
-        return PngBackground(tuple(value for value, in iter_unpack('>H', data)))
+        return PngBackground(tuple(value for (value,) in iter_unpack('>H', data)))
 
     def to_chunk(self) -> PngChunk:
         if (self.color is None) == (self.palette_index is None):
@@ -486,7 +516,7 @@ class PngHistogram(PngMetadata):
         data = _data(chunk, b'hIST')
         if not 2 <= len(data) <= 512 or len(data) % 2:
             raise PngValidationError('hIST requires 1-256 two-byte frequencies')
-        return PngHistogram([value for value, in iter_unpack('>H', data)])
+        return PngHistogram([value for (value,) in iter_unpack('>H', data)])
 
     def to_chunk(self) -> PngChunk:
         if not 1 <= len(self.frequencies) <= 256:
@@ -551,8 +581,7 @@ class PngSuggestedPalette(PngMetadata):
     sample_depth: int
     entries: list[PngSuggestedPaletteEntry]
 
-    def __init__(self, name: str, sample_depth: int = 8,
-                 entries: list[PngSuggestedPaletteEntry] | None = None) -> None:
+    def __init__(self, name: str, sample_depth: int = 8, entries: list[PngSuggestedPaletteEntry] | None = None) -> None:
         self.name = name
         self.sample_depth = sample_depth
         self.entries = entries if entries is not None else []
@@ -566,8 +595,10 @@ class PngSuggestedPalette(PngMetadata):
         size = 6 if depth == 8 else 10
         if (len(tail) - 1) % size:
             raise PngValidationError('sPLT contains an incomplete palette entry')
-        entries = [PngSuggestedPaletteEntry(values[:4], values[4])
-                   for values in iter_unpack('>4BH' if depth == 8 else '>5H', tail[1:])]
+        entries = [
+            PngSuggestedPaletteEntry(values[:4], values[4])
+            for values in iter_unpack('>4BH' if depth == 8 else '>5H', tail[1:])
+        ]
         result = PngSuggestedPalette(name, depth, entries)
         result.validate()
         return result
@@ -589,11 +620,26 @@ class PngSuggestedPalette(PngMetadata):
 
 
 _METADATA_CLASSES = {
-    cls.type: cls for cls in (
-        PngGamma, PngChromaticities, PngSrgb, PngCicp, PngMasteringDisplayColorVolume,
-        PngContentLightLevel, PngIccProfile, PngText, PngCompressedText, PngInternationalText,
-        PngPhysicalDimensions, PngTime, PngExif, PngBackground, PngHistogram,
-        PngSignificantBits, PngSuggestedPalette, *EXTENSION_CLASSES,
+    cls.type: cls
+    for cls in (
+        PngGamma,
+        PngChromaticities,
+        PngSrgb,
+        PngCicp,
+        PngMasteringDisplayColorVolume,
+        PngContentLightLevel,
+        PngIccProfile,
+        PngText,
+        PngCompressedText,
+        PngInternationalText,
+        PngPhysicalDimensions,
+        PngTime,
+        PngExif,
+        PngBackground,
+        PngHistogram,
+        PngSignificantBits,
+        PngSuggestedPalette,
+        *EXTENSION_CLASSES,
     )
 }
 METADATA_TYPES = frozenset(_METADATA_CLASSES)
@@ -612,8 +658,13 @@ def parse_metadata(chunk: PngChunk, *, budget: ReadBudget | None = None) -> PngM
 
 
 def validate_metadata_chunks(
-        chunks: list[PngChunk], header: PngHeader | None = None, palette_size: int = 0,
-        *, for_encoding: bool = False, budget: ReadBudget | None = None, check_profile_structure: bool = False,
+    chunks: list[PngChunk],
+    header: PngHeader | None = None,
+    palette_size: int = 0,
+    *,
+    for_encoding: bool = False,
+    budget: ReadBudget | None = None,
+    check_profile_structure: bool = False,
 ) -> None:
     if budget is None:
         budget = ReadBudget(None)

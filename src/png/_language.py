@@ -39,8 +39,9 @@ def validate_language_tag(encoded: bytes) -> None:
     if index < len(parts) and len(parts[index]) == 4 and parts[index].isalpha():
         _registered('script', parts[index])
         index += 1
-    if index < len(parts) and ((len(parts[index]) == 2 and parts[index].isalpha()) or
-                               (len(parts[index]) == 3 and parts[index].isdigit())):
+    if index < len(parts) and (
+        (len(parts[index]) == 2 and parts[index].isalpha()) or (len(parts[index]) == 3 and parts[index].isdigit())
+    ):
         _registered('region', parts[index])
         index += 1
     variants = set()

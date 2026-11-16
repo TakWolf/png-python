@@ -50,7 +50,7 @@ class ReadBudget:
             width, height = unpack('>II', data[:8])
             self.pixels(width * height)
         elif kind == b'acTL' and len(data) == 8:
-            declared, = unpack('>I', data[:4])
+            (declared,) = unpack('>I', data[:4])
             self.check('max_frames', declared)
         elif kind == b'fcTL' and len(data) == 26:
             self.frames += 1

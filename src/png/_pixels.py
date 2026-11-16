@@ -9,8 +9,7 @@ from png.error import PngParseError
 from png.format import PngColorType, PngFilterType, PngInterlaceMethod
 from png.header import PngHeader
 
-_ADAM7 = ((0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4),
-          (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2))
+_ADAM7 = ((0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2))
 
 
 def _passes(header: PngHeader) -> Iterator[tuple[int, int, int, int, int, int]]:
@@ -96,11 +95,10 @@ def _unpack_samples(row: bytes, depth: int, count: int) -> list[int]:
     if depth == 8:
         return list(row)
     if depth == 16:
-        return [sample for sample, in iter_unpack('>H', row)]
+        return [sample for (sample,) in iter_unpack('>H', row)]
     per_byte = 8 // depth
     mask = (1 << depth) - 1
-    return [(row[index // per_byte] >> (8 - depth * (index % per_byte + 1))) & mask
-            for index in range(count)]
+    return [(row[index // per_byte] >> (8 - depth * (index % per_byte + 1))) & mask for index in range(count)]
 
 
 def _pack_samples(samples: list[int], depth: int) -> bytes:
@@ -118,8 +116,7 @@ def _pack_samples(samples: list[int], depth: int) -> bytes:
 def decode_pixels(header: PngHeader, blocks: Iterable[bytes]) -> list[list[int]]:
     passes = list(_passes(header))
     channels = header.channels
-    expected_size = sum(((width * header.bits_per_pixel + 7) // 8 + 1) * height
-                        for _, _, _, _, width, height in passes)
+    expected_size = sum(((width * header.bits_per_pixel + 7) // 8 + 1) * height for _, _, _, _, width, height in passes)
     # Validate the decompressed extent before allocating the bitmap from IHDR.
     data = _inflate(blocks, expected_size)
     bitmap = [[0] * (header.width * channels) for _ in range(header.height)]
@@ -129,22 +126,22 @@ def decode_pixels(header: PngHeader, blocks: Iterable[bytes]) -> list[list[int]]
         row_size = (width * header.bits_per_pixel + 7) // 8
         previous = bytes(row_size)
         for row_index in range(height):
-            row = _unfilter(data[offset], data[offset + 1:offset + row_size + 1], previous, stride)
+            row = _unfilter(data[offset], data[offset + 1 : offset + row_size + 1], previous, stride)
             offset += row_size + 1
             previous = row
             samples = _unpack_samples(row, header.bit_depth, width * channels)
             target = bitmap[y + row_index * dy]
             for index in range(width):
                 start = (x + index * dx) * channels
-                target[start:start + channels] = samples[index * channels:(index + 1) * channels]
+                target[start : start + channels] = samples[index * channels : (index + 1) * channels]
     return bitmap
 
 
 def encode_pixels(
-        header: PngHeader,
-        bitmap: list[list[int]],
-        filter_type: PngFilterType | None,
-        compression_level: int,
+    header: PngHeader,
+    bitmap: list[list[int]],
+    filter_type: PngFilterType | None,
+    compression_level: int,
 ) -> bytes:
     check_integer('compression level', compression_level, -1, 9)
     if filter_type is not None:
@@ -157,15 +154,20 @@ def encode_pixels(
         previous = bytes((width * header.bits_per_pixel + 7) // 8)
         for row_index in range(height):
             source = bitmap[y + row_index * dy]
-            samples = [sample for index in range(width)
-                       for sample in source[(x + index * dx) * channels:(x + index * dx + 1) * channels]]
+            samples = [
+                sample
+                for index in range(width)
+                for sample in source[(x + index * dx) * channels : (x + index * dx + 1) * channels]
+            ]
             row = _pack_samples(samples, header.bit_depth)
             kind = filter_type
             if kind is None and (header.bit_depth < 8 or header.color_type == PngColorType.INDEXED_COLOR):
                 kind = PngFilterType.NONE
             if kind is None:
                 candidates = [(option, _filter(option, row, previous, stride)) for option in PngFilterType]
-                kind, filtered = min(candidates, key=lambda candidate: sum(min(value, 256 - value) for value in candidate[1]))
+                kind, filtered = min(
+                    candidates, key=lambda candidate: sum(min(value, 256 - value) for value in candidate[1])
+                )
             else:
                 filtered = _filter(kind, row, previous, stride)
             data.extend(compressor.compress(bytes([kind]) + filtered))

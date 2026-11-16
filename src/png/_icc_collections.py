@@ -26,7 +26,7 @@ def validate_dictionary(data: bytes) -> None:
             end = offset + size
             if offset < table_end or offset % 4 or end > len(data):
                 raise PngValidationError('ICC dictionary item offset or size is invalid')
-            if any(view[end:min((end + 3) & ~3, len(data))]):
+            if any(view[end : min((end + 3) & ~3, len(data))]):
                 raise PngValidationError('ICC dictionary item padding must be zero')
             extent = (offset, size, field < 2)
             if extent not in checked:
@@ -63,7 +63,7 @@ def validate_response_curves(data: bytes) -> None:
         raise PngValidationError('ICC response curve offset table exceeds its tag')
     checked = set()
     for index in range(count):
-        offset, = unpack_from('>I', data, 12 + index * 4)
+        (offset,) = unpack_from('>I', data, 12 + index * 4)
         if offset in checked:
             continue
         arrays = offset + 4 + channels * 16

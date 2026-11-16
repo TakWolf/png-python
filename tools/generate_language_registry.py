@@ -28,8 +28,10 @@ def records(path: Path) -> list[dict[str, list[str]]]:
 
 
 def _set(name: str, values: list[str]) -> str:
-    lines = '\n'.join(f'        {line + " "!r}' for line in wrap(' '.join(sorted(values)), width=100,
-                                                               break_long_words=False, break_on_hyphens=False))
+    lines = '\n'.join(
+        f'        {line + " "!r}'
+        for line in wrap(' '.join(sorted(values)), width=100, break_long_words=False, break_on_hyphens=False)
+    )
     return f'{name} = frozenset(\n    (\n{lines}\n    ).split()\n)\n'
 
 
@@ -51,7 +53,7 @@ def generate() -> str:
             else:
                 values[kind].append(value)
         elif kind == 'extlang':
-            prefix, = record['Prefix']
+            (prefix,) = record['Prefix']
             prefixes[record['Subtag'][0].lower()] = prefix.lower()
         elif kind == 'grandfathered':
             grandfathered.append(record['Tag'][0].lower())

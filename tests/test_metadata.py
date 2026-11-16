@@ -7,11 +7,27 @@ import zlib
 import pytest
 
 from png import (
-    PngChunk, PngChromaticities, PngCicp, PngCompressedText, PngContentLightLevel,
-    PngDocument, PngExif, PngGamma, PngHeader, PngIccProfile, PngImage,
-    PngInternationalText, PngMasteringDisplayColorVolume, PngPhysicalDimensions,
-    PngPhysicalUnit, PngRenderingIntent, PngSrgb, PngText, PngTime,
-    PngParseError, PngValidationError,
+    PngChunk,
+    PngChromaticities,
+    PngCicp,
+    PngCompressedText,
+    PngContentLightLevel,
+    PngDocument,
+    PngExif,
+    PngGamma,
+    PngHeader,
+    PngIccProfile,
+    PngImage,
+    PngInternationalText,
+    PngMasteringDisplayColorVolume,
+    PngPhysicalDimensions,
+    PngPhysicalUnit,
+    PngRenderingIntent,
+    PngSrgb,
+    PngText,
+    PngTime,
+    PngParseError,
+    PngValidationError,
 )
 
 _ROOT = Path(__file__).parents[1]
@@ -47,17 +63,22 @@ def test_wpt_color_and_exif_metadata(path: Path) -> None:
     ]
 
 
-@pytest.mark.parametrize(('metadata', 'expected'), [
-    (PngGamma(45455), bytes.fromhex('0000b18f')),
-    (PngSrgb(PngRenderingIntent.SATURATION), b'\x02'),
-    (PngCicp(9, 16), bytes.fromhex('09100001')),
-    (PngContentLightLevel(10000000, 2500000), bytes.fromhex('00989680002625a0')),
-    (PngPhysicalDimensions(11811, 11811, PngPhysicalUnit.METRE), bytes.fromhex('00002e2300002e2301')),
-    (PngTime(2016, 12, 31, 23, 59, 60), bytes.fromhex('07e00c1f173b3c')),
-    (PngText('Title', 'Café'), b'Title\0Caf\xe9'),
-    (PngInternationalText('Title', '测试', 'zh', '标题'),
-     b'Title\0\0\0zh\0' + '标题'.encode() + b'\0' + '测试'.encode()),
-])
+@pytest.mark.parametrize(
+    ('metadata', 'expected'),
+    [
+        (PngGamma(45455), bytes.fromhex('0000b18f')),
+        (PngSrgb(PngRenderingIntent.SATURATION), b'\x02'),
+        (PngCicp(9, 16), bytes.fromhex('09100001')),
+        (PngContentLightLevel(10000000, 2500000), bytes.fromhex('00989680002625a0')),
+        (PngPhysicalDimensions(11811, 11811, PngPhysicalUnit.METRE), bytes.fromhex('00002e2300002e2301')),
+        (PngTime(2016, 12, 31, 23, 59, 60), bytes.fromhex('07e00c1f173b3c')),
+        (PngText('Title', 'Café'), b'Title\0Caf\xe9'),
+        (
+            PngInternationalText('Title', '测试', 'zh', '标题'),
+            b'Title\0\0\0zh\0' + '标题'.encode() + b'\0' + '测试'.encode(),
+        ),
+    ],
+)
 def test_fixed_reference_payloads(metadata, expected: bytes) -> None:
     assert metadata.to_chunk().data == expected
     assert type(metadata).from_chunk(PngChunk(metadata.type, expected)).to_chunk().data == expected
@@ -72,7 +93,12 @@ def test_gamma_exact_units_and_mutation() -> None:
 
 def test_hdr_example_and_official_whitepoint_erratum() -> None:
     metadata = PngMasteringDisplayColorVolume(
-        (35400, 14600), (8500, 39850), (6550, 2300), (15635, 16450), 40000000, 5,
+        (35400, 14600),
+        (8500, 39850),
+        (6550, 2300),
+        (15635, 16450),
+        40000000,
+        5,
     )
     # The erratum corrects D65 x to 0x3d13, not the old example's 0x3c05.
     expected = bytes.fromhex('8a48390821349baa199608fc3d13404202625a0000000005')
@@ -92,12 +118,18 @@ def test_chromaticity_field_order() -> None:
 
 
 def test_create_edit_repeated_multilingual_metadata() -> None:
-    image = PngImage(PngHeader((1, 1)), [[255, 0, 0, 255]], metadata=[
-        PngGamma(45455), PngPhysicalDimensions(11811, 11811, PngPhysicalUnit.METRE),
-        PngText('Author', 'First'), PngText('Author', 'Second'),
-        PngInternationalText('Description', '中文说明', 'zh-Hans', '说明', compressed=True),
-        PngCompressedText('Comment', 'Café\nComments'),
-    ])
+    image = PngImage(
+        PngHeader((1, 1)),
+        [[255, 0, 0, 255]],
+        metadata=[
+            PngGamma(45455),
+            PngPhysicalDimensions(11811, 11811, PngPhysicalUnit.METRE),
+            PngText('Author', 'First'),
+            PngText('Author', 'Second'),
+            PngInternationalText('Description', '中文说明', 'zh-Hans', '说明', compressed=True),
+            PngCompressedText('Comment', 'Café\nComments'),
+        ],
+    )
     restored = PngImage.parse(image.dump_to_bytes())
     assert [entry.text for entry in restored.find_metadata(b'tEXt')] == ['First', 'Second']
     restored.find_metadata(b'tEXt')[1].text = 'Edited'
@@ -131,41 +163,58 @@ def test_compression_is_standard_zlib_and_methods_are_handled_correctly() -> Non
     assert decoded.to_chunk().data == b'Title\0\0\0en\0Title\0Text'
 
 
-@pytest.mark.parametrize('keyword', ['', ' leading', 'trailing ', 'two  spaces', 'line\nbreak', '\xa0', 'x' * 80, '中文'])
+@pytest.mark.parametrize(
+    'keyword', ['', ' leading', 'trailing ', 'two  spaces', 'line\nbreak', '\xa0', 'x' * 80, '中文']
+)
 def test_invalid_keywords(keyword: str) -> None:
     with pytest.raises(PngValidationError):
         PngText(keyword, 'text').to_chunk()
 
 
-@pytest.mark.parametrize('chunk', [
-    PngChunk(b'tEXt', b'no separator'),
-    PngChunk(b'tEXt', b'Keyword\0text\0'),
-    PngChunk(b'zTXt', b'Keyword\0\x01' + zlib.compress(b'text')),
-    PngChunk(b'zTXt', b'Keyword\0\0' + zlib.compress(b'text')[:-1]),
-    PngChunk(b'zTXt', b'Keyword\0\0' + zlib.compress(b'text') + b'extra'),
-    PngChunk(b'iTXt', b'Keyword\0\x02\0\0\0text'),
-    PngChunk(b'iTXt', b'Keyword\0\x01\x01\0\0' + zlib.compress(b'text')),
-    PngChunk(b'iTXt', b'Keyword\0\0\0en\0'),
-    PngChunk(b'iTXt', b'Keyword\0\0\0\0\0\xff'),
-    PngChunk(b'iCCP', b'Profile\0\x01' + zlib.compress(b'data')),
-    PngChunk(b'iCCP', b'Profile\0\0' + zlib.compress(b'')),
-    PngChunk(b'eXIf', b'Exif\0\0II*\0'),
-])
+@pytest.mark.parametrize(
+    'chunk',
+    [
+        PngChunk(b'tEXt', b'no separator'),
+        PngChunk(b'tEXt', b'Keyword\0text\0'),
+        PngChunk(b'zTXt', b'Keyword\0\x01' + zlib.compress(b'text')),
+        PngChunk(b'zTXt', b'Keyword\0\0' + zlib.compress(b'text')[:-1]),
+        PngChunk(b'zTXt', b'Keyword\0\0' + zlib.compress(b'text') + b'extra'),
+        PngChunk(b'iTXt', b'Keyword\0\x02\0\0\0text'),
+        PngChunk(b'iTXt', b'Keyword\0\x01\x01\0\0' + zlib.compress(b'text')),
+        PngChunk(b'iTXt', b'Keyword\0\0\0en\0'),
+        PngChunk(b'iTXt', b'Keyword\0\0\0\0\0\xff'),
+        PngChunk(b'iCCP', b'Profile\0\x01' + zlib.compress(b'data')),
+        PngChunk(b'iCCP', b'Profile\0\0' + zlib.compress(b'')),
+        PngChunk(b'eXIf', b'Exif\0\0II*\0'),
+    ],
+)
 def test_malformed_payloads(chunk: PngChunk) -> None:
     from png.metadata import parse_metadata
+
     with pytest.raises(PngValidationError):
         parse_metadata(chunk)
 
 
-@pytest.mark.parametrize('value', [
-    PngGamma(0), PngGamma(0x80000000), PngSrgb(4), PngSrgb(True),
-    PngCicp(1, 1, matrix_coefficients=1), PngCicp(1, 1, video_full_range_flag=2),
-    PngPhysicalDimensions(-1, 1), PngPhysicalDimensions(1, 1, unit=2),
-    PngTime(2026, 13, 1), PngTime(2026, 1, 0), PngTime(2026, 1, 1, second=61),
-    PngContentLightLevel(0x80000000, 0), PngText('Title', '中文'),
-    PngInternationalText('Title', 'text', language_tag='en_US'),
-    PngInternationalText('Title', 'nul\0text'),
-])
+@pytest.mark.parametrize(
+    'value',
+    [
+        PngGamma(0),
+        PngGamma(0x80000000),
+        PngSrgb(4),
+        PngSrgb(True),
+        PngCicp(1, 1, matrix_coefficients=1),
+        PngCicp(1, 1, video_full_range_flag=2),
+        PngPhysicalDimensions(-1, 1),
+        PngPhysicalDimensions(1, 1, unit=2),
+        PngTime(2026, 13, 1),
+        PngTime(2026, 1, 0),
+        PngTime(2026, 1, 1, second=61),
+        PngContentLightLevel(0x80000000, 0),
+        PngText('Title', '中文'),
+        PngInternationalText('Title', 'text', language_tag='en_US'),
+        PngInternationalText('Title', 'nul\0text'),
+    ],
+)
 def test_invalid_metadata_fields(value) -> None:
     with pytest.raises(PngValidationError):
         value.validate()
@@ -207,8 +256,9 @@ def test_text_placement_and_independent_models(png_suite_dir: Path) -> None:
 
 
 def test_duplicate_raw_and_structured_metadata_is_rejected() -> None:
-    image = PngImage(PngHeader((1, 1)), [[0] * 4], metadata=[PngGamma(45455)],
-                     ancillary_chunks=[PngGamma(45455).to_chunk()])
+    image = PngImage(
+        PngHeader((1, 1)), [[0] * 4], metadata=[PngGamma(45455)], ancillary_chunks=[PngGamma(45455).to_chunk()]
+    )
     with pytest.raises(PngValidationError, match='duplicate'):
         image.validate()
 

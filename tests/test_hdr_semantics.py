@@ -14,8 +14,7 @@ def test_hdr_unknown_and_outside_nominal_values_are_not_rejected(png_suite_dir):
 
 
 def test_png_hdr_precision_is_preserved_before_any_display_interpretation():
-    mastering = PngMasteringDisplayColorVolume((35401, 14602), (8501, 39852), (6551, 2302),
-                                              (15636, 16451), 801234, 5)
+    mastering = PngMasteringDisplayColorVolume((35401, 14602), (8501, 39852), (6551, 2302), (15636, 16451), 801234, 5)
     restored = PngMasteringDisplayColorVolume.from_chunk(mastering.to_chunk())
     assert restored.maximum_luminance == 801234
     assert restored.red == (35401, 14602)

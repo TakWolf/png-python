@@ -17,7 +17,8 @@ def frame_header(header: PngHeader, dimensions: tuple[int, int]) -> PngHeader:
 
 
 def scan_animation(
-        chunks: list[PngChunk], header: PngHeader,
+    chunks: list[PngChunk],
+    header: PngHeader,
 ) -> tuple[int, list[tuple[PngFrameControl, list[PngChunk], bool]]] | None:
     controls = [chunk for chunk in chunks if chunk.type == b'acTL']
     if not controls:
@@ -36,7 +37,7 @@ def scan_animation(
         if chunk.type == b'acTL' and seen_data:
             raise PngValidationError('acTL must precede IDAT')
         if chunk.type in (b'fcTL', b'fdAT'):
-            actual, = unpack('>I', chunk.data[:4])
+            (actual,) = unpack('>I', chunk.data[:4])
             check_integer('sequence number', actual, 0, 0x7FFFFFFF)
             if actual != sequence:
                 raise PngValidationError(f'expected APNG sequence number {sequence}, got {actual}')

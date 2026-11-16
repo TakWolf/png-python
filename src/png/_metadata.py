@@ -37,9 +37,16 @@ def _decode(data: bytes, encoding: str) -> str:
 
 def _keyword(value: str) -> bytes:
     encoded = _string(value, 'latin-1')
-    if (not 1 <= len(encoded) <= 79 or value.startswith(' ') or value.endswith(' ') or '  ' in value or
-            any(not (32 <= item <= 126 or 161 <= item <= 255) for item in encoded)):
-        raise PngValidationError('keyword must be 1-79 printable Latin-1 bytes without leading, trailing or repeated spaces')
+    if (
+        not 1 <= len(encoded) <= 79
+        or value.startswith(' ')
+        or value.endswith(' ')
+        or '  ' in value
+        or any(not (32 <= item <= 126 or 161 <= item <= 255) for item in encoded)
+    ):
+        raise PngValidationError(
+            'keyword must be 1-79 printable Latin-1 bytes without leading, trailing or repeated spaces'
+        )
     return encoded
 
 
@@ -66,5 +73,3 @@ class PngMetadata(ABC):
 
     def validate(self) -> None:
         self.to_chunk()
-
-

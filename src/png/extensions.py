@@ -67,9 +67,13 @@ class PngCalibration(PngMetadata):
     parameters: list[str]
 
     def __init__(
-            self, name: str, original_zero: int, original_max: int,
-            equation_type: PngCalibrationEquation = PngCalibrationEquation.LINEAR,
-            unit_name: str = '', parameters: list[str] | None = None,
+        self,
+        name: str,
+        original_zero: int,
+        original_max: int,
+        equation_type: PngCalibrationEquation = PngCalibrationEquation.LINEAR,
+        unit_name: str = '',
+        parameters: list[str] | None = None,
     ) -> None:
         self.name = name
         self.original_zero = original_zero
@@ -91,8 +95,14 @@ class PngCalibration(PngMetadata):
         fields = tail[10:].split(b'\0')
         if len(fields) != count + 1:
             raise PngValidationError('pCAL parameter count does not match its payload')
-        result = PngCalibration(name, zero, maximum, equation, _decode(fields[0], 'latin-1'),
-                                [_decode(value, 'ascii') for value in fields[1:]])
+        result = PngCalibration(
+            name,
+            zero,
+            maximum,
+            equation,
+            _decode(fields[0], 'latin-1'),
+            [_decode(value, 'ascii') for value in fields[1:]],
+        )
         result.validate()
         result.equation_type = PngCalibrationEquation(equation)
         return result
@@ -110,8 +120,13 @@ class PngCalibration(PngMetadata):
         if any(not (32 <= item <= 126 or 161 <= item <= 255) for item in unit):
             raise PngValidationError('pCAL unit name must contain printable Latin-1 characters')
         fields = [unit, *(_number(value) for value in self.parameters)]
-        return PngChunk(self.type, name + b'\0' + pack('>iiBB', self.original_zero, self.original_max,
-                                                      self.equation_type, self.num_parameters) + b'\0'.join(fields))
+        return PngChunk(
+            self.type,
+            name
+            + b'\0'
+            + pack('>iiBB', self.original_zero, self.original_max, self.equation_type, self.num_parameters)
+            + b'\0'.join(fields),
+        )
 
 
 class PngPhysicalScale(PngMetadata):
@@ -138,8 +153,13 @@ class PngPhysicalScale(PngMetadata):
 
     def to_chunk(self) -> PngChunk:
         check_integer('scale unit', self.unit, 1, 2)
-        return PngChunk(self.type, bytes([self.unit]) + _number(self.pixel_width, positive=True) + b'\0' +
-                        _number(self.pixel_height, positive=True))
+        return PngChunk(
+            self.type,
+            bytes([self.unit])
+            + _number(self.pixel_width, positive=True)
+            + b'\0'
+            + _number(self.pixel_height, positive=True),
+        )
 
 
 class PngGifGraphicControl(PngMetadata):
@@ -219,7 +239,7 @@ class PngStereo(PngMetadata):
 
     @staticmethod
     def from_chunk(chunk: PngChunk) -> PngStereo:
-        mode, = _data(chunk, PngStereo.type, 1)
+        (mode,) = _data(chunk, PngStereo.type, 1)
         result = PngStereo(mode)
         result.validate()
         result.mode = PngStereoMode(mode)
@@ -230,5 +250,4 @@ class PngStereo(PngMetadata):
         return PngChunk(self.type, bytes([self.mode]))
 
 
-EXTENSION_CLASSES = (PngOffset, PngCalibration, PngPhysicalScale, PngGifGraphicControl,
-                     PngGifApplication, PngStereo)
+EXTENSION_CLASSES = (PngOffset, PngCalibration, PngPhysicalScale, PngGifGraphicControl, PngGifApplication, PngStereo)

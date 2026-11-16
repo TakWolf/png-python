@@ -34,12 +34,12 @@ def _settings(data: bytes, endian: str) -> None:
     # Display rows/columns describe layout. The specification does not give
     # a product-to-setting-count equation, so consume the actual strings.
     while cursor < len(data):
-        signature = data[cursor:cursor + 2]
+        signature = data[cursor : cursor + 2]
         if signature not in (b'\xff\xfe', b'\xfe\xff'):
             raise PngValidationError('Exif device setting requires a UTF-16 signature')
         start = cursor + 2
         end = start
-        while end + 2 <= len(data) and data[end:end + 2] != bytes(2):
+        while end + 2 <= len(data) and data[end : end + 2] != bytes(2):
             end += 2
         if end + 2 > len(data):
             raise PngValidationError('Exif device setting is not terminated')
@@ -88,12 +88,12 @@ def validate_binary(tag: int, data: bytes, endian: str, version: bytes) -> None:
     elif tag == 0xA462:
         if len(data) < 58:
             raise PngValidationError('Exif composite exposures require seven rationals and a sequence count')
-        sequences, = unpack_from(endian + 'H', data, 56)
+        (sequences,) = unpack_from(endian + 'H', data, 56)
         expected = 58
         if sequences:
             if len(data) < 60:
                 raise PngValidationError('Exif composite exposure image count is truncated')
-            images, = unpack_from(endian + 'H', data, 58)
+            (images,) = unpack_from(endian + 'H', data, 58)
             if sequences * images < 2:
                 raise PngValidationError('Exif composite exposures require at least two source images')
             expected = 60 + 8 * images

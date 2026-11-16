@@ -11,7 +11,7 @@ def ascii_terminated(data: bytes | memoryview) -> None:
 
 
 def _header(data: memoryview, start: int, minimum: int) -> None:
-    if start + minimum > len(data) or any(data[start + 4:start + 8]):
+    if start + minimum > len(data) or any(data[start + 4 : start + 8]):
         raise PngValidationError('ICC embedded text header is truncated or has nonzero reserved bytes')
 
 
@@ -20,13 +20,13 @@ def description_end(data: memoryview, start: int = 0) -> int:
     ascii_end = start + 12 + unpack_from('>I', data, start + 8)[0]
     if ascii_end + 8 > len(data):
         raise PngValidationError('ICC description ASCII data exceeds the tag')
-    ascii_terminated(data[start + 12:ascii_end])
-    unicode_count, = unpack_from('>I', data, ascii_end + 4)
+    ascii_terminated(data[start + 12 : ascii_end])
+    (unicode_count,) = unpack_from('>I', data, ascii_end + 4)
     unicode_end = ascii_end + 8 + 2 * unicode_count
     end = unicode_end + 70
     if end > len(data):
         raise PngValidationError('ICC description Unicode or ScriptCode extent is invalid')
-    if unicode_count and any(data[unicode_end - 2:unicode_end]):
+    if unicode_count and any(data[unicode_end - 2 : unicode_end]):
         raise PngValidationError('ICC description Unicode string requires a terminator')
     script_count = data[unicode_end + 2]
     if script_count > 67 or (script_count and data[unicode_end + 2 + script_count] != 0):
@@ -61,7 +61,7 @@ def multilingual_end(data: memoryview, start: int = 0) -> int:
 
 def embedded_text_end(data: memoryview, start: int) -> int:
     _header(data, start, 8)
-    kind = bytes(data[start:start + 4])
+    kind = bytes(data[start : start + 4])
     if kind == b'desc':
         return description_end(data, start)
     if kind == b'mluc':

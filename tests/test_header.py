@@ -6,15 +6,16 @@ from png import PngChunk, PngColorType, PngHeader, PngInterlaceMethod, PngValida
 
 
 @pytest.mark.parametrize('interlace', ['n', 'i'])
-@pytest.mark.parametrize(('color_type', 'bit_depth'), [
-    (PngColorType.GRAYSCALE, depth) for depth in (1, 2, 4, 8, 16)
-] + [
-    (PngColorType.INDEXED_COLOR, depth) for depth in (1, 2, 4, 8)
-] + [
-    (color, depth)
-    for color in (PngColorType.TRUECOLOR, PngColorType.GRAYSCALE_ALPHA, PngColorType.TRUECOLOR_ALPHA)
-    for depth in (8, 16)
-])
+@pytest.mark.parametrize(
+    ('color_type', 'bit_depth'),
+    [(PngColorType.GRAYSCALE, depth) for depth in (1, 2, 4, 8, 16)]
+    + [(PngColorType.INDEXED_COLOR, depth) for depth in (1, 2, 4, 8)]
+    + [
+        (color, depth)
+        for color in (PngColorType.TRUECOLOR, PngColorType.GRAYSCALE_ALPHA, PngColorType.TRUECOLOR_ALPHA)
+        for depth in (8, 16)
+    ],
+)
 def test_pngsuite_header(png_suite_dir: Path, interlace: str, color_type: PngColorType, bit_depth: int) -> None:
     letter = {0: 'g', 2: 'c', 3: 'p', 4: 'a', 6: 'a'}[color_type]
     name = f'bas{interlace}{color_type.value}{letter}{bit_depth:02}.png'
@@ -43,11 +44,20 @@ def test_color_depth_combinations(color_type: PngColorType, bit_depth: int) -> N
             header.validate()
 
 
-@pytest.mark.parametrize(('field', 'value'), [
-    ('width', 0), ('height', -1), ('width', 1 << 31), ('height', True),
-    ('bit_depth', 8.0), ('color_type', 1), ('compression_method', 1),
-    ('filter_method', 1), ('interlace_method', 2),
-])
+@pytest.mark.parametrize(
+    ('field', 'value'),
+    [
+        ('width', 0),
+        ('height', -1),
+        ('width', 1 << 31),
+        ('height', True),
+        ('bit_depth', 8.0),
+        ('color_type', 1),
+        ('compression_method', 1),
+        ('filter_method', 1),
+        ('interlace_method', 2),
+    ],
+)
 def test_invalid_header_fields(field: str, value: int) -> None:
     header = PngHeader((1, 1))
     setattr(header, field, value)

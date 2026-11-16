@@ -9,22 +9,59 @@ from png.error import PngUnsupportedError, PngValidationError
 ARRAY_WIDTHS = {b'uf32': 4, b'ui08': 1, b'ui16': 2, b'ui32': 4, b'ui64': 8}
 MISC_TYPES = frozenset(ARRAY_WIDTHS) | {b'data', b'dtim', b'sig ', b'meas', b'view', b'chrm', b'clro', b'cicp'}
 V4_TAG_TYPES = {
-    b'chrm': (b'chrm',), b'clro': (b'clro',), b'cicp': (b'cicp',),
-    b'meas': (b'meas',), b'view': (b'view',), b'calt': (b'dtim',), b'targ': (b'text',),
-    b'tech': (b'sig ',), b'ciis': (b'sig ',), b'rig0': (b'sig ',), b'rig2': (b'sig ',),
-    b'dmnd': (b'mluc',), b'dmdd': (b'mluc',), b'vued': (b'mluc',),
+    b'chrm': (b'chrm',),
+    b'clro': (b'clro',),
+    b'cicp': (b'cicp',),
+    b'meas': (b'meas',),
+    b'view': (b'view',),
+    b'calt': (b'dtim',),
+    b'targ': (b'text',),
+    b'tech': (b'sig ',),
+    b'ciis': (b'sig ',),
+    b'rig0': (b'sig ',),
+    b'rig2': (b'sig ',),
+    b'dmnd': (b'mluc',),
+    b'dmdd': (b'mluc',),
+    b'vued': (b'mluc',),
     b'pre0': (b'mft1', b'mft2', b'mAB ', b'mBA '),
-    b'pre1': (b'mft1', b'mft2', b'mBA '), b'pre2': (b'mft1', b'mft2', b'mBA '),
+    b'pre1': (b'mft1', b'mft2', b'mBA '),
+    b'pre2': (b'mft1', b'mft2', b'mBA '),
 }
 
 # ICC.1:2022 9.2.39/9.2.48 Tables 27/28 and 9.2.49 Table 29.
 # These are tag-context values, not a whitelist for arbitrary signatureType data.
-_TECHNOLOGIES = frozenset((
-    b'fscn', b'dcam', b'rscn', b'ijet', b'twax', b'epho', b'esta', b'dsub',
-    b'rpho', b'fprn', b'vidm', b'vidc', b'pjtv', b'CRT ', b'PMD ', b'AMD ',
-    b'LCD ', b'OLED', b'KPCD', b'imgs', b'grav', b'offs', b'silk', b'flex',
-    b'mpfs', b'mpfr', b'dmpc', b'dcpj',
-))
+_TECHNOLOGIES = frozenset(
+    (
+        b'fscn',
+        b'dcam',
+        b'rscn',
+        b'ijet',
+        b'twax',
+        b'epho',
+        b'esta',
+        b'dsub',
+        b'rpho',
+        b'fprn',
+        b'vidm',
+        b'vidc',
+        b'pjtv',
+        b'CRT ',
+        b'PMD ',
+        b'AMD ',
+        b'LCD ',
+        b'OLED',
+        b'KPCD',
+        b'imgs',
+        b'grav',
+        b'offs',
+        b'silk',
+        b'flex',
+        b'mpfs',
+        b'mpfr',
+        b'dmpc',
+        b'dcpj',
+    )
+)
 
 
 def validate_misc(data: bytes) -> None:
@@ -37,7 +74,7 @@ def validate_misc(data: bytes) -> None:
     if size < 12 or (kind in fixed and size != fixed[kind]):
         raise PngValidationError('ICC optional tag has an invalid size')
     if kind == b'data':
-        flag, = unpack_from('>I', data, 8)
+        (flag,) = unpack_from('>I', data, 8)
         if flag > 1:
             raise PngValidationError('ICC data flag must identify ASCII or binary data')
         if flag == 0:
@@ -47,9 +84,9 @@ def validate_misc(data: bytes) -> None:
         if not 1 <= month <= 12 or not 1 <= day <= 31 or hour > 23 or minute > 59 or second > 59:
             raise PngValidationError('ICC dateTime fields are outside their ranges')
     elif kind == b'meas':
-        observer, = unpack_from('>I', data, 8)
-        geometry, = unpack_from('>I', data, 24)
-        illuminant, = unpack_from('>I', data, 32)
+        (observer,) = unpack_from('>I', data, 8)
+        (geometry,) = unpack_from('>I', data, 24)
+        (illuminant,) = unpack_from('>I', data, 32)
         if observer > 2 or geometry > 2 or illuminant > 8:
             raise PngValidationError('ICC measurement encoding is not defined')
     elif kind == b'view':
@@ -57,11 +94,12 @@ def validate_misc(data: bytes) -> None:
             raise PngValidationError('ICC viewing illuminant is not defined')
     elif kind == b'cicp':
         from png._color_codes import validate_code_points
+
         validate_code_points(*data[8:12])
         if data[11] > 1:
             raise PngValidationError('ICC cicp full range flag must be zero or one')
     elif kind == b'clro':
-        count, = unpack_from('>I', data, 8)
+        (count,) = unpack_from('>I', data, 8)
         if size != 12 + count or len(set(data[12:])) != count:
             raise PngValidationError('ICC colorant order count or repeated colorants are invalid')
     elif kind == b'chrm':
@@ -70,11 +108,16 @@ def validate_misc(data: bytes) -> None:
             raise PngValidationError('ICC chromaticity channel count disagrees with its size')
         # The normative matching requirement explicitly names encodings 1..4.
         standard = {
-            1: (640, 330, 300, 600, 150, 60), 2: (630, 340, 310, 595, 155, 70),
-            3: (640, 330, 290, 600, 150, 60), 4: (625, 340, 280, 605, 155, 70),
+            1: (640, 330, 300, 600, 150, 60),
+            2: (630, 340, 310, 595, 155, 70),
+            3: (640, 330, 290, 600, 150, 60),
+            4: (625, 340, 280, 605, 155, 70),
         }
         if encoding in standard:
-            if count != 3 or tuple((v * 1000 + 32768) // 65536 for v in unpack_from('>6I', data, 12)) != standard[encoding]:
+            if (
+                count != 3
+                or tuple((v * 1000 + 32768) // 65536 for v in unpack_from('>6I', data, 12)) != standard[encoding]
+            ):
                 raise PngValidationError('ICC standard phosphor chromaticities disagree with its encoding')
 
 
@@ -87,6 +130,7 @@ def validate_misc_context(profile: bytes, signature: bytes, data: memoryview) ->
             raise PngValidationError('ICC ICCHDAT target requires a space and reference name')
         if text[:7] == b'ICCHDAT':
             from png._icc_registry_data import CHARACTERIZATION
+
             if text[8:-1] not in CHARACTERIZATION:
                 raise PngUnsupportedError('ICC target name cannot be confirmed by the 2026-11-16 registry snapshot')
     if signature == b'tech' and bytes(data[8:12]) not in _TECHNOLOGIES:

@@ -30,8 +30,8 @@ from png import PngHeader, PngImage
 image = PngImage(
     header=PngHeader(dimensions=(2, 2)),  # RGBA, 8 bits per sample by default
     bitmap=[
-        [255, 0, 0, 255,  0, 255, 0, 255],
-        [0, 0, 255, 255,  255, 255, 255, 128],
+        [255, 0, 0, 255, 0, 255, 0, 255],
+        [0, 0, 255, 255, 255, 255, 255, 128],
     ],
 )
 image.save('created.png')
@@ -61,9 +61,9 @@ Continue with `created.png` from the previous example:
 from png import PngImage
 
 image = PngImage.load('created.png')
-print(image.dimensions)        # (2, 2)
+print(image.dimensions)  # (2, 2)
 print(image.header.bit_depth)  # 8
-print(image.bitmap[0][:4])     # [255, 0, 0, 255]
+print(image.bitmap[0][:4])  # [255, 0, 0, 255]
 
 # Replace the top-left RGBA pixel with opaque yellow.
 image.bitmap[0][0:4] = [255, 255, 0, 255]
@@ -150,7 +150,7 @@ scaled = PngImage.from_samples(
     sample_depth=12,
     color_type=PngColorType.GRAYSCALE,
 )
-print(scaled.header.bit_depth)          # 16
+print(scaled.header.bit_depth)  # 16
 print(scaled.find_metadata(b'sBIT')[0].bits)  # (12,)
 scaled.save('scaled.png')
 ```
@@ -168,17 +168,19 @@ Metadata objects live in `image.metadata`. Unicode text uses iTXt:
 from png import PngGamma, PngImage, PngInternationalText, PngText
 
 image = PngImage.load('created.png')
-image.metadata.extend([
-    PngText('Author', 'Example'),
-    PngInternationalText(
-        keyword='Description',
-        text='Image description',
-        language_tag='en',
-        translated_keyword='Description',
-        compressed=True,
-    ),
-    PngGamma(45455),  # Stored integer; gamma is exactly 45455/100000
-])
+image.metadata.extend(
+    [
+        PngText('Author', 'Example'),
+        PngInternationalText(
+            keyword='Description',
+            text='Image description',
+            language_tag='en',
+            translated_keyword='Description',
+            compressed=True,
+        ),
+        PngGamma(45455),  # Stored integer; gamma is exactly 45455/100000
+    ]
+)
 image.save('with-metadata.png')
 
 loaded = PngImage.load('with-metadata.png')
@@ -238,27 +240,34 @@ followed by a local blue pixel blended into its top-right corner:
 
 ```python
 from png import (
-    PngAnimation, PngBlendOp, PngDisposeOp, PngFrame, PngFrameControl,
-    PngHeader, PngImage,
+    PngAnimation,
+    PngBlendOp,
+    PngDisposeOp,
+    PngFrame,
+    PngFrameControl,
+    PngHeader,
+    PngImage,
 )
 
 image = PngImage(
     PngHeader((2, 1)),
-    bitmap=[[255, 0, 0, 255,  255, 0, 0, 255]],
+    bitmap=[[255, 0, 0, 255, 255, 0, 0, 255]],
     animation=PngAnimation(
         num_plays=0,  # Repeat indefinitely
         default_image_control=PngFrameControl((2, 1), delay_num=1, delay_den=2),
-        frames=[PngFrame(
-            control=PngFrameControl(
-                dimensions=(1, 1),
-                offset=(1, 0),
-                delay_num=1,
-                delay_den=2,
-                blend_op=PngBlendOp.OVER,
-                dispose_op=PngDisposeOp.PREVIOUS,
-            ),
-            bitmap=[[0, 0, 255, 128]],
-        )],
+        frames=[
+            PngFrame(
+                control=PngFrameControl(
+                    dimensions=(1, 1),
+                    offset=(1, 0),
+                    delay_num=1,
+                    delay_den=2,
+                    blend_op=PngBlendOp.OVER,
+                    dispose_op=PngDisposeOp.PREVIOUS,
+                ),
+                bitmap=[[0, 0, 255, 128]],
+            )
+        ],
     ),
 )
 image.save('animated.png')

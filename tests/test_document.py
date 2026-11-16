@@ -206,7 +206,7 @@ def test_critical_edit_omits_unknown_unsafe_chunks(document: PngDocument) -> Non
     # Splitting IDAT changes critical chunks, but retains the encoded pixels.
     index = next(index for index, chunk in enumerate(cloned.chunks) if chunk.type == b'IDAT')
     payload = cloned.chunks[index].data
-    cloned.chunks[index:index + 1] = [PngChunk(b'IDAT', payload[:1]), PngChunk(b'IDAT', payload[1:])]
+    cloned.chunks[index : index + 1] = [PngChunk(b'IDAT', payload[:1]), PngChunk(b'IDAT', payload[1:])]
     output = PngDocument.parse(cloned.dump_to_bytes())
     assert output.find_chunks(b'vpAg')[0].data == b'safe'
     assert not output.find_chunks(b'vpAG')
