@@ -9,6 +9,8 @@ from png.error import PngParseError
 from png.format import PngColorType, PngFilterType, PngInterlaceMethod
 from png.header import PngHeader
 
+_FILTER_COST = bytes(value if value < 128 else 256 - value for value in range(256))
+
 _ADAM7 = ((0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2))
 
 
@@ -98,6 +100,42 @@ def _filter(kind: int, row: bytes, previous: bytes, stride: int) -> bytes:
     return bytes(filtered)
 
 
+def _filter_and_score(kind: int, row: bytes, previous: bytes, stride: int, trial: bytearray, minimum: int) -> int:
+    # libpng's unweighted heuristic: generate and score together, abandoning
+    # candidates that already exceed the best complete score. Partial trial
+    # rows must never become the selected output.
+    score = 0
+    costs = _FILTER_COST
+    if kind == 1:
+        for index, sample in enumerate(row):
+            value = trial[index] = (sample - (row[index - stride] if index >= stride else 0)) & 255
+            score += costs[value]
+            if score > minimum:
+                return score
+    elif kind == 2:
+        for index, sample in enumerate(row):
+            value = trial[index] = (sample - previous[index]) & 255
+            score += costs[value]
+            if score > minimum:
+                return score
+    elif kind == 3:
+        for index, sample in enumerate(row):
+            left = row[index - stride] if index >= stride else 0
+            value = trial[index] = (sample - ((left + previous[index]) // 2)) & 255
+            score += costs[value]
+            if score > minimum:
+                return score
+    else:
+        for index, sample in enumerate(row):
+            left = row[index - stride] if index >= stride else 0
+            upper_left = previous[index - stride] if index >= stride else 0
+            value = trial[index] = (sample - _paeth(left, previous[index], upper_left)) & 255
+            score += costs[value]
+            if score > minimum:
+                return score
+    return score
+
+
 def _unpack_samples(row: bytes, depth: int, count: int) -> list[int]:
     if depth == 8:
         return list(row)
@@ -160,12 +198,20 @@ def encode_pixels(
     check_integer('compression level', compression_level, -1, 9)
     if filter_type is not None:
         check_integer('filter type', filter_type, 0, 4)
+    adaptive = filter_type is None and header.bit_depth >= 8 and header.color_type != PngColorType.INDEXED_COLOR
+    if filter_type is None and not adaptive:
+        filter_type = PngFilterType.NONE
     compressor = zlib.compressobj(compression_level)
     data = bytearray()
     channels = header.channels
     stride = max(1, (header.bits_per_pixel + 7) // 8)
     for x, y, dx, dy, width, height in _passes(header):
-        previous = bytes((width * header.bits_per_pixel + 7) // 8)
+        row_size = (width * header.bits_per_pixel + 7) // 8
+        previous = bytes(row_size)
+        if adaptive:
+            # Keep the best candidate and a scratch row; swap rather than copy.
+            best = bytearray(row_size)
+            trial = bytearray(row_size)
         for row_index in range(height):
             source = bitmap[y + row_index * dy]
             samples = (
@@ -179,14 +225,17 @@ def encode_pixels(
             )
             row = _pack_samples(samples, header.bit_depth)
             kind = filter_type
-            if kind is None and (header.bit_depth < 8 or header.color_type == PngColorType.INDEXED_COLOR):
-                kind = PngFilterType.NONE
-            if kind is None:
-                candidates = [(option, _filter(option, row, previous, stride)) for option in PngFilterType]
-                kind, filtered = min(
-                    candidates,
-                    key=lambda candidate: sum(value if value < 128 else 256 - value for value in candidate[1]),
-                )
+            if adaptive:
+                kind, filtered = 0, row
+                minimum = sum(row.translate(_FILTER_COST))
+                for option in range(1, 5):
+                    if minimum == 0:
+                        break
+                    score = _filter_and_score(option, row, previous, stride, trial, minimum)
+                    if score < minimum:
+                        minimum = score
+                        best, trial = trial, best
+                        kind, filtered = option, best
             else:
                 filtered = _filter(kind, row, previous, stride)
             data.extend(compressor.compress(bytes([kind]) + filtered))

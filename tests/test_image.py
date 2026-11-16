@@ -373,3 +373,24 @@ def test_image_output_rejects_reserved_chunks_before_writing(from_document: bool
     assert destination.read_bytes() == b'preserved'
     with pytest.raises(PngValidationError, match='reserved'):
         model.dump_to_bytes()
+
+
+@pytest.mark.parametrize(
+    ('rows', 'scanlines'),
+    [
+        ([[0, 0, 0], [0, 0, 0]], [0, 0, 0, 0, 0, 0, 0, 0]),
+        ([[1, 0, 0]], [0, 1, 0, 0]),
+        ([[1, 1, 1], [1, 1, 1]], [1, 1, 0, 0, 2, 0, 0, 0]),
+        ([[122, 92, 84], [107, 204, 81]], [1, 122, 226, 248, 2, 241, 112, 253]),
+        ([[65, 191, 222], [34, 83, 223]], [0, 65, 191, 222, 3, 2, 227, 71]),
+        ([[163, 124, 55], [139, 27, 37]], [3, 163, 43, 249, 4, 232, 159, 10]),
+    ],
+)
+def test_adaptive_filter_fixed_choices_and_ties(rows: list[list[int]], scanlines: list[int]) -> None:
+    # Fixed residuals cover all five choices, signed-byte costs, ties and a
+    # zero-score row. Ties retain the earliest filter in PNG filter order.
+    image = PngImage(PngHeader((3, len(rows)), color_type=PngColorType.GRAYSCALE), rows)
+    document = image.to_document()
+    raw = zlib.decompress(b''.join(chunk.data for chunk in document.find_chunks(b'IDAT')))
+    assert raw == bytes(scanlines)
+    assert PngImage.from_document(document).bitmap == rows
