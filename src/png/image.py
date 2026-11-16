@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from io import BytesIO
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from os import PathLike
 from struct import iter_unpack, pack
 from typing import BinaryIO
@@ -256,6 +256,27 @@ class PngImage:
     def find_metadata(self, chunk_type: bytes) -> list[PngMetadata]:
         """Return references to supported metadata entries in list order."""
         return [item for item in self.metadata if item.type == chunk_type]
+
+    def select_color_metadata(self, understood_types: Iterable[bytes]) -> list[PngMetadata]:
+        """Select color descriptions using PNG's precedence and caller capabilities.
+
+        The caller declares which descriptions it understands, including their
+        parameter values. This selects signaling; it does not transform samples.
+        Returned entries are independent copies, including explicit raw chunks.
+        """
+        from copy import deepcopy
+        self.validate()
+        understood = set(understood_types)
+        color_types = {b'cICP', b'iCCP', b'sRGB', b'gAMA', b'cHRM'}
+        entries = {item.type: item for item in self.metadata if item.type in color_types}
+        for chunk in self.ancillary_chunks:
+            if chunk.type in color_types:
+                entries[chunk.type] = parse_metadata(chunk)
+        for group in ((b'cICP',), (b'iCCP',), (b'sRGB',), (b'gAMA', b'cHRM')):
+            result = [entries[kind] for kind in group if kind in understood and kind in entries]
+            if result:
+                return deepcopy(result)
+        return []
 
     def recalculate_histogram(self) -> PngHistogram:
         """Update/create hIST for indexed samples, including APNG local frames.
