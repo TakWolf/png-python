@@ -10,7 +10,7 @@ ARRAY_WIDTHS = {b'uf32': 4, b'ui08': 1, b'ui16': 2, b'ui32': 4, b'ui64': 8}
 MISC_TYPES = frozenset(ARRAY_WIDTHS) | {b'data', b'dtim', b'sig ', b'meas', b'view', b'chrm', b'clro', b'cicp'}
 V4_TAG_TYPES = {
     b'chrm': (b'chrm',), b'clro': (b'clro',), b'cicp': (b'cicp',),
-    b'meas': (b'meas',), b'view': (b'view',), b'calt': (b'dtim',),
+    b'meas': (b'meas',), b'view': (b'view',), b'calt': (b'dtim',), b'targ': (b'text',),
     b'tech': (b'sig ',), b'ciis': (b'sig ',), b'rig0': (b'sig ',), b'rig2': (b'sig ',),
     b'dmnd': (b'mluc',), b'dmdd': (b'mluc',), b'vued': (b'mluc',),
     b'pre0': (b'mft1', b'mft2', b'mAB ', b'mBA '),
@@ -79,6 +79,12 @@ def validate_misc(data: bytes) -> None:
 
 
 def validate_misc_context(profile: bytes, signature: bytes, data: memoryview) -> None:
+    if signature == b'targ':
+        text = data[8:].tobytes()
+        if len(text) < 8:
+            raise PngValidationError('ICC characterization target requires a seven-character identifier')
+        if text[:7] == b'ICCHDAT' and (text[7:8] != b' ' or len(text) < 10 or b'\0' in text[8:-1]):
+            raise PngValidationError('ICC ICCHDAT target requires a space and reference name')
     if signature == b'tech' and bytes(data[8:12]) not in _TECHNOLOGIES:
         raise PngValidationError('ICC technology signature is not defined in ICC.1:2022')
     if signature in (b'rig0', b'rig2') and data[8:12] != b'prmg':

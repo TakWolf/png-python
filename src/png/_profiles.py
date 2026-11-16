@@ -125,7 +125,7 @@ def validate_icc_tags(profile: bytes) -> None:
             validate_mpet_context(profile, signature, memoryview(profile)[offset:offset + size])
         elif version == 4 and kind == b'clrt':
             validate_colorant_context(profile, signature, memoryview(profile)[offset:offset + size])
-        if version == 4 and kind in MISC_TYPES:
+        if version == 4 and (kind in MISC_TYPES or signature == b'targ'):
             validate_misc_context(profile, signature, memoryview(profile)[offset:offset + size])
         if version == 4 and signature == b'resp':
             from png._icc_lut import _channels
@@ -172,6 +172,13 @@ def validate_icc_tags(profile: bytes) -> None:
             missing.update({b'view'}.difference(tags))
             if state in (b'rhoc', b'rpoc'):
                 missing.update({b'chad'}.difference(tags))
+            elif b'view' in tags:
+                x, y, z = unpack_from('>3i', profile, offsets[b'view'] + 8)
+                # These ciis states explicitly identify view's illuminant as
+                # the source adopted white. Generic viewing metadata alone
+                # does not establish the original measurement conditions.
+                if y > 0 and ((10000 * x + y // 2) // y, (10000 * z + y // 2) // y) != (9642, 8249):
+                    missing.update({b'chad'}.difference(tags))
         if profile_class == b'mntr' and b'wtpt' in tags:
             white = unpack_from('>3i', profile, offsets[b'wtpt'] + 8)
             if tuple((value * 10000 + 32768) // 65536 for value in white) != (9642, 10000, 8249):

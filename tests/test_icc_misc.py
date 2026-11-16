@@ -141,3 +141,31 @@ def test_v4_display_media_white_is_the_pcs_illuminant(assets_dir):
     tags[b'wtpt'] = _payload(b'XYZ ', pack('>3i', 60000, 65536, 70000))
     with pytest.raises(PngValidationError, match='media white'):
         PngIccProfile('Display white', _rebuild(profile, tags, profile_class=b'mntr')).validate_profile_tags()
+
+
+@pytest.mark.parametrize('state', [b'scoe', b'sape', b'fpce'])
+def test_declared_non_d50_adopted_white_requires_chromatic_adaptation(assets_dir, state):
+    profile = assets_dir.joinpath('icc', 'sRGB_v4_ICC_preference.icc').read_bytes()
+    tags = _tags(profile)
+    tags.pop(b'chad', None)
+    tags[b'ciis'] = _payload(b'sig ', state)
+    tags[b'view'] = _payload(b'view', pack('>6iI', 62290, 65536, 71372, 0, 0, 0, 2))
+    with pytest.raises(PngValidationError, match='chad'):
+        PngIccProfile('Declared source white', _rebuild(profile, tags)).validate_profile_tags()
+    tags[b'view'] = _payload(b'view', pack('>6iI', 63190, 65536, 54061, 0, 0, 0, 1))
+    PngIccProfile('D50 source white', _rebuild(profile, tags)).validate_profile_tags()
+
+
+@pytest.mark.parametrize('text,valid', [(b'ICCHDAT Example\0', True), (b'CGATS.5\nopaque measurement data\0', True),
+                                       (b'ICCHDAT\0', False), (b'ICCHDAT \0', False),
+                                       (b'ICCHDATXExample\0', False), (b'short\0', False)])
+def test_characterization_target_identifier_format(assets_dir, text, valid):
+    profile = assets_dir.joinpath('icc', 'sRGB_v4_ICC_preference.icc').read_bytes()
+    tags = _tags(profile)
+    tags[b'targ'] = _payload(b'text', text)
+    metadata = PngIccProfile('Characterization', _rebuild(profile, tags))
+    if valid:
+        metadata.validate_profile_tags()
+    else:
+        with pytest.raises(PngValidationError, match='target'):
+            metadata.validate_profile_tags()
