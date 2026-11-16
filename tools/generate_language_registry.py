@@ -2,8 +2,11 @@
 
 This is a repository maintenance script, not a PNG command-line interface.
 It does not access the network or alter the original registry files.
+Requires Ruff from the project's development dependencies to format the output.
 """
 
+import subprocess
+import sys
 from pathlib import Path
 from pprint import pformat
 from textwrap import wrap
@@ -69,7 +72,24 @@ def generate() -> str:
     header += 'RANGES = ' + pformat({kind: tuple(value) for kind, value in ranges.items()}, sort_dicts=True) + '\n\n'
     header += 'EXTLANG_PREFIXES = ' + pformat(dict(sorted(prefixes.items())), sort_dicts=True) + '\n\n'
     header += _set('GRANDFATHERED', grandfathered) + '\n'
-    return header + _set('EXTENSION_SINGLETONS', [record['Identifier'][0].lower() for record in extensions])
+    source = header + _set('EXTENSION_SINGLETONS', [record['Identifier'][0].lower() for record in extensions])
+    return subprocess.run(
+        [
+            sys.executable,
+            '-m',
+            'ruff',
+            'format',
+            '--config',
+            str(ROOT.joinpath('pyproject.toml')),
+            '--stdin-filename',
+            str(ROOT.joinpath('src', 'png', '_language_data.py')),
+            '-',
+        ],
+        input=source,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout
 
 
 def main() -> None:

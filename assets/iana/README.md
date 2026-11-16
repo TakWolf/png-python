@@ -13,8 +13,11 @@ Only the derived lookup tables in `src/png/_language_data.py` ship with the
 runtime package. Regenerate them from the repository root with:
 
 ```shell
-python tools/generate_language_registry.py
+uv run -m tools.generate_language_registry
 ```
+
+The script uses Ruff from the development dependencies to format the generated
+module according to `pyproject.toml`.
 
 This maintenance script has no network access. To update the snapshot, fetch the
 original files from the URLs in `SOURCE.json`, update their provenance, regenerate

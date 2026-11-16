@@ -2,10 +2,13 @@
 
 Maintenance tool; no network access or PNG CLI. Ambiguous registry spellings
 are retained separately instead of silently repairing the official data.
+Requires Ruff from the project's development dependencies to format the output.
 """
 
 import json
 import re
+import subprocess
+import sys
 from pathlib import Path
 from pprint import pformat
 
@@ -48,7 +51,23 @@ def generate() -> str:
         result += name + ' = frozenset(' + pformat(sorted(values), width=110) + ')\n\n'
     names = json.loads(directory.joinpath('characterization.json').read_text())
     result += 'CHARACTERIZATION = frozenset(' + pformat([name.encode('ascii') for name in names]) + ')\n'
-    return result
+    return subprocess.run(
+        [
+            sys.executable,
+            '-m',
+            'ruff',
+            'format',
+            '--config',
+            str(ROOT.joinpath('pyproject.toml')),
+            '--stdin-filename',
+            str(ROOT.joinpath('src', 'png', '_icc_registry_data.py')),
+            '-',
+        ],
+        input=result,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout
 
 
 def main() -> None:
