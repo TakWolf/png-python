@@ -206,6 +206,27 @@ def validate_fields(profile: bytes, endian: str, role: str, fields: dict[int, tu
                 raise PngValidationError(f'Exif GPS field {tag:#06x} has a reserved reference value')
         if 30 in fields and unpack_from(endian + 'H', profile, fields[30][2])[0] not in (0, 1):
             raise PngValidationError('Exif GPSDifferential must be zero or one')
+    if role == 'exif':
+        from png._exif_binary import validate_binary
+        for tag in (0x8828, 0xA20C, 0xA302, 0xA40B, 0xA462, 0x9286):
+            if tag in fields:
+                _, size, start = fields[tag]
+                validate_binary(tag, profile[start:start + size], endian, version)
+        for tag in (0x8831, 0x8832, 0x8833):
+            if tag in fields and not {0x8827, 0x8830}.issubset(fields):
+                raise PngValidationError('Exif sensitivity values require PhotographicSensitivity and SensitivityType')
+        if (0x8834 in fields or 0x8835 in fields) and not {0x8833, 0x8834, 0x8835}.issubset(fields):
+            raise PngValidationError('Exif ISO speed latitude requires both latitude values and ISOSpeed')
+        if 0x8830 in fields and unpack_from(endian + 'H', profile, fields[0x8830][2])[0] > 7:
+            raise PngValidationError('Exif SensitivityType uses a reserved value')
+        if 0xA460 in fields:
+            composite = unpack_from(endian + 'H', profile, fields[0xA460][2])[0]
+            if composite > 3 or (composite == 3 and not {0xA461, 0xA462}.issubset(fields)):
+                raise PngValidationError('Exif composite capture requires source counts and exposure times')
+        if 0xA461 in fields:
+            total, used = unpack_from(endian + '2H', profile, fields[0xA461][2])
+            if total < 2 or (used and not 2 <= used <= total):
+                raise PngValidationError('Exif composite source image counts are inconsistent')
     if role == 'exif' and (len(version) != 4 or not version.isdigit()):
         raise PngValidationError('Exif IFD requires a four-digit ExifVersion')
     if role == 'gps' and any(tag in GPS_FIELDS and tag != 0 for tag in fields) and 0 not in fields:

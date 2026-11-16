@@ -36,6 +36,7 @@ def validate_exif_structure(profile: bytes, *, check_fields: bool = False) -> No
             following = uint32(following + 2 + 12 * count)
         if following:
             raise PngValidationError('Exif APP1 permits only the primary and thumbnail image IFDs')
+    directories = {}
     states: dict[tuple[int, str], int] = {}
     pending = [(first, False, 'image')]
     while pending:
@@ -99,6 +100,7 @@ def validate_exif_structure(profile: bytes, *, check_fields: bool = False) -> No
                     thumbnail[tag] = value
         if check_fields:
             validate_fields(profile, endian, role, fields)
+            directories[key] = fields
         if thumbnail:
             if set(thumbnail) != {0x0201, 0x0202} or not thumbnail[0x0202]:
                 raise PngValidationError('Exif JPEG thumbnail requires an offset and nonzero length')
@@ -125,3 +127,23 @@ def validate_exif_structure(profile: bytes, *, check_fields: bool = False) -> No
         if following:
             children.append((following, role))
         pending.extend((child, False, child_role) for child, child_role in reversed(children))
+    if check_fields:
+        for (offset, role), fields in directories.items():
+            if role != 'image' or 0x8769 not in fields:
+                continue
+            child = uint32(fields[0x8769][2])
+            exif = directories.get((child, 'exif'), {})
+            if any(tag in exif for tag in (0xA430, 0xA437, 0xA438)) and 0x013B not in fields:
+                raise PngValidationError('Exif owner/photographer/editor fields require Artist')
+            if any(tag in exif for tag in (0xA439, 0xA43A, 0xA43B, 0xA43C)) and 0x0131 not in fields:
+                raise PngValidationError('Exif firmware/developing/editing fields require Software')
+        from png._exif_binary import validate_binary
+        root = directories.get((first, 'image'), {})
+        source = directories.get((uint32(root[0x8769][2]), 'exif'), {}) if 0x8769 in root else {}
+        version = profile[source[0x9000][2]:source[0x9000][2] + 4] if 0x9000 in source else b''
+        for (offset, role), fields in directories.items():
+            if role == 'gps':
+                for tag in (0x001B, 0x001C):
+                    if tag in fields:
+                        _, size, start = fields[tag]
+                        validate_binary(tag, profile[start:start + size], endian, version)
