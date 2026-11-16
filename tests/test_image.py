@@ -348,3 +348,28 @@ def test_from_document_revalidates_previously_loaded_document(png_suite_dir: Pat
     document.chunks.insert(-1, document.chunks[0])
     with pytest.raises(PngValidationError, match='duplicate'):
         PngImage.from_document(document)
+
+
+@pytest.mark.parametrize('from_document', [False, True])
+def test_image_output_rejects_reserved_chunks_before_writing(from_document: bool, tmp_path: Path) -> None:
+    image = PngImage(PngHeader((1, 1)), [[10, 20, 30, 255]])
+    reserved = PngChunk(b'vpag', b'future')
+    if from_document:
+        model = image.to_document()
+        # A document returned for inspection must be checked again after edits.
+        model.chunks.insert(-1, reserved)
+    else:
+        image.ancillary_chunks.append(reserved)
+        model = image
+        assert image.to_document().find_chunks(b'vpag')[0].data == b'future'
+    stream = BytesIO(b'preserved')
+    with pytest.raises(PngValidationError, match='reserved'):
+        model.dump(stream)
+    assert stream.getvalue() == b'preserved'
+    destination = tmp_path.joinpath('preserved.png')
+    destination.write_bytes(b'preserved')
+    with pytest.raises(PngValidationError, match='reserved'):
+        model.save(destination)
+    assert destination.read_bytes() == b'preserved'
+    with pytest.raises(PngValidationError, match='reserved'):
+        model.dump_to_bytes()

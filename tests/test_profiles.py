@@ -279,7 +279,7 @@ def test_document_and_image_writers_reject_bad_profiles_without_writing_or_mutat
     encoded = b'\x89PNG\r\n\x1a\n' + b''.join(chunk.dump_to_bytes() for chunk in document.chunks)
     loaded = PngDocument.parse(encoded)
     image = PngImage.from_document(loaded)
-    for model in (loaded, image):
+    for model in (loaded, image, image.to_document()):
         stream = BytesIO(b'existing bytes')
         stream.seek(0, 2)
         with pytest.raises(error_type):

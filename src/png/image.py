@@ -206,6 +206,22 @@ class PngImage:
         idat_chunk_size: int = 65536,
     ) -> PngDocument:
         """Encode an image. None selects adaptive scanline filtering."""
+        document = self._encode_document(
+            filter_type=filter_type, compression_level=compression_level, idat_chunk_size=idat_chunk_size
+        )
+        document.validate()
+        return document
+
+    def _encode_document(
+        self,
+        *,
+        filter_type: PngFilterType | None,
+        compression_level: int,
+        idat_chunk_size: int,
+    ) -> PngDocument:
+        # Build an operation-local document. Each caller then applies either
+        # inspection validation or the stronger output validation, exactly once.
+        # Publicly returned documents remain mutable and are rechecked on output.
         self.validate()
         check_integer('IDAT chunk size', idat_chunk_size, 1, 0x7FFFFFFF)
         encoded = encode_pixels(self.header, self.bitmap, filter_type, compression_level)
@@ -262,9 +278,7 @@ class PngImage:
                     sequence += 1
         chunks.extend(after)
         chunks.append(PngChunk(b'IEND'))
-        document = PngDocument(chunks)
-        document.validate()
-        return document
+        return PngDocument(chunks)
 
     def render_frames(self) -> Iterator[PngRenderedFrame]:
         """Yield independent RGBA canvas snapshots for one animation play.
@@ -351,7 +365,7 @@ class PngImage:
         compression_level: int = 6,
         idat_chunk_size: int = 65536,
     ) -> None:
-        self.to_document(
+        self._encode_document(
             filter_type=filter_type, compression_level=compression_level, idat_chunk_size=idat_chunk_size
         ).dump(stream)
 
@@ -374,7 +388,7 @@ class PngImage:
         compression_level: int = 6,
         idat_chunk_size: int = 65536,
     ) -> None:
-        self.to_document(
+        self._encode_document(
             filter_type=filter_type, compression_level=compression_level, idat_chunk_size=idat_chunk_size
         ).save(file_path)
 
