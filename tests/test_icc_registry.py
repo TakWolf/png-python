@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from png import PngIccProfile, PngUnsupportedError, PngValidationError
+from png._icc_misc import validate_misc_context
 
 
 def _profile(assets_dir, changes):
@@ -44,3 +45,11 @@ def test_registry_snapshot_provenance_and_reproducible_tables(assets_dir):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     assert module.generate() == root.joinpath('src', 'png', '_icc_registry_data.py').read_text()
+
+
+def test_characterization_reference_names_require_exact_registered_spelling():
+    for name in (b'FOGRA39', b'CGATS TR 001', b'APTEC Coated CardBoard'):
+        validate_misc_context(bytes(128), b'targ', memoryview(b'text' + bytes(4) + b'ICCHDAT ' + name + b'\0'))
+    for name in (b'fogra39', b'FOGRA39 ', b'Example'):
+        with pytest.raises(PngUnsupportedError, match='registry snapshot'):
+            validate_misc_context(bytes(128), b'targ', memoryview(b'text' + bytes(4) + b'ICCHDAT ' + name + b'\0'))

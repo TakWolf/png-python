@@ -4,7 +4,7 @@ from struct import unpack_from
 
 from png._icc_lut import _channels
 from png._icc_text import ascii_terminated
-from png.error import PngValidationError
+from png.error import PngUnsupportedError, PngValidationError
 
 ARRAY_WIDTHS = {b'uf32': 4, b'ui08': 1, b'ui16': 2, b'ui32': 4, b'ui64': 8}
 MISC_TYPES = frozenset(ARRAY_WIDTHS) | {b'data', b'dtim', b'sig ', b'meas', b'view', b'chrm', b'clro', b'cicp'}
@@ -85,6 +85,10 @@ def validate_misc_context(profile: bytes, signature: bytes, data: memoryview) ->
             raise PngValidationError('ICC characterization target requires a seven-character identifier')
         if text[:7] == b'ICCHDAT' and (text[7:8] != b' ' or len(text) < 10 or b'\0' in text[8:-1]):
             raise PngValidationError('ICC ICCHDAT target requires a space and reference name')
+        if text[:7] == b'ICCHDAT':
+            from png._icc_registry_data import CHARACTERIZATION
+            if text[8:-1] not in CHARACTERIZATION:
+                raise PngUnsupportedError('ICC target name cannot be confirmed by the 2026-11-16 registry snapshot')
     if signature == b'tech' and bytes(data[8:12]) not in _TECHNOLOGIES:
         raise PngValidationError('ICC technology signature is not defined in ICC.1:2022')
     if signature in (b'rig0', b'rig2') and data[8:12] != b'prmg':

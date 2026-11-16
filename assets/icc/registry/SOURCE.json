@@ -25,6 +25,14 @@
       "sha256": "53e18341dd3f5f3d32cfeecd570c6fd826457f81b90b69f68ba5185df9bcb5c2",
       "records": 3071,
       "selection": "Signature columns only; original spelling retained, including inconsistencies. Contact information is omitted."
+    },
+    {
+      "path": "characterization.json",
+      "source": "https://registry.color.org/cmyk-registry/",
+      "source_sha256": "b143424443a3d8df28e30c7bba2ba5c8777151286bc2394c726ab30f9a8ed572",
+      "sha256": "135ed38fcfb36c082479b6ac3d6338ae14fe2ecf088eafd6da2bb63632855e90",
+      "records": 56,
+      "selection": "Reference name column from the characterization data table; spelling and spaces retained."
     }
   ]
 }

@@ -156,7 +156,7 @@ def test_declared_non_d50_adopted_white_requires_chromatic_adaptation(assets_dir
     PngIccProfile('D50 source white', _rebuild(profile, tags)).validate_profile_tags()
 
 
-@pytest.mark.parametrize('text,valid', [(b'ICCHDAT Example\0', True), (b'CGATS.5\nopaque measurement data\0', True),
+@pytest.mark.parametrize('text,valid', [(b'ICCHDAT FOGRA39\0', True), (b'CGATS.5\nopaque measurement data\0', True),
                                        (b'ICCHDAT\0', False), (b'ICCHDAT \0', False),
                                        (b'ICCHDATXExample\0', False), (b'short\0', False)])
 def test_characterization_target_identifier_format(assets_dir, text, valid):

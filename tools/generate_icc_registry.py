@@ -41,6 +41,8 @@ def generate() -> str:
     for name, values in [('CMM', cmm), ('MANUFACTURERS', manufacturers), ('DEVICES', devices),
                          ('UNCERTAIN', uncertain), ('UNCERTAIN_DEVICES', uncertain_devices)]:
         result += name + ' = frozenset(' + pformat(sorted(values), width=110) + ')\n\n'
+    names = json.loads(directory.joinpath('characterization.json').read_text())
+    result += 'CHARACTERIZATION = frozenset(' + pformat([name.encode('ascii') for name in names]) + ')\n'
     return result
 
 
