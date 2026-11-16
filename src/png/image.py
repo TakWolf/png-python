@@ -15,11 +15,12 @@ from png.animation import PngAnimation, PngFrame, PngRenderedFrame
 from png.chunk import PngChunk
 from png.document import PngDocument
 from png.error import PngParseError, PngValidationError
-from png.format import PngColorType, PngFilterType
+from png.format import PngColorType, PngFilterType, PngInterlaceMethod
 from png.header import PngHeader
 from png.limits import PngReadLimits
 from png.metadata import (
-    METADATA_TYPES, PngMetadata, PngBackground, PngHistogram, parse_metadata, validate_metadata_chunks,
+    METADATA_TYPES, PngMetadata, PngBackground, PngHistogram, PngSignificantBits,
+    parse_metadata, validate_metadata_chunks,
 )
 
 
@@ -62,6 +63,48 @@ class PngImage:
         self.ancillary_chunks = ancillary_chunks if ancillary_chunks is not None else []
         self.metadata = metadata if metadata is not None else []
         self._source_ancillary = None
+
+    @staticmethod
+    def from_samples(
+            dimensions: tuple[int, int], bitmap: list[list[int]], sample_depth: int | tuple[int, ...],
+            color_type: PngColorType = PngColorType.TRUECOLOR_ALPHA, *,
+            interlace_method: PngInterlaceMethod = PngInterlaceMethod.NONE,
+    ) -> PngImage:
+        """Scale direct-color reference samples to the smallest legal PNG depth.
+
+        A tuple gives each channel's source depth, including straight alpha.
+        sBIT preserves those depths. Palette indices use the ordinary constructor
+        because indices are identifiers, not intensities to scale.
+        """
+        check_integer('color type', color_type, 0, 6)
+        try:
+            color_type = PngColorType(color_type)
+        except ValueError as error:
+            raise PngValidationError('unrecognized sample color type') from error
+        if color_type == PngColorType.INDEXED_COLOR:
+            raise PngValidationError('palette indices must not be scaled as color samples')
+        depths = (sample_depth,) * color_type.channels if isinstance(sample_depth, int) else tuple(sample_depth)
+        if len(depths) != color_type.channels:
+            raise PngValidationError('source sample depths must match the channel count')
+        for depth in depths:
+            check_integer('source sample depth', depth, 1, 16)
+        target = min(depth for depth in color_type.bit_depths if depth >= max(depths))
+        header = PngHeader(dimensions, target, color_type, interlace_method=interlace_method)
+        header.validate()
+        if len(bitmap) != header.height or any(len(row) != header.width * header.channels for row in bitmap):
+            raise PngValidationError('reference sample rows must match the image dimensions')
+        rows = []
+        maximum = (1 << target) - 1
+        for row in bitmap:
+            scaled = []
+            for index, value in enumerate(row):
+                source_maximum = (1 << depths[index % header.channels]) - 1
+                check_integer('reference sample', value, 0, source_maximum)
+                scaled.append((value * maximum + source_maximum // 2) // source_maximum)
+            rows.append(scaled)
+        image = PngImage(header, rows, metadata=[PngSignificantBits(depths)])
+        image.validate()
+        return image
 
     @staticmethod
     def from_document(document: PngDocument, *, limits: PngReadLimits | None = None) -> PngImage:
