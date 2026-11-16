@@ -91,6 +91,13 @@ def test_icc_v4_matrix_is_an_alternative_to_lut(v4_matrix: bytes, profile_class:
         PngIccProfile('Matrix with Lab PCS', profile).validate_profile_tags()
 
 
+def test_matrix_model_requires_three_device_components(v4_matrix: bytes) -> None:
+    for color_space in (b'2CLR', b'CMYK'):
+        profile = _rebuild(v4_matrix, _tags(v4_matrix), profile_class=b'scnr', color_space=color_space)
+        with pytest.raises(PngValidationError, match='A2B0'):
+            PngIccProfile('Non-three-component matrix', profile).validate_profile_tags()
+
+
 @pytest.mark.parametrize(('profile_class', 'remove', 'missing'), [
     (b'scnr', b'A2B0', 'A2B0'), (b'mntr', b'B2A0', 'B2A0'),
     (b'prtr', b'A2B0', 'gamt'), (b'spac', b'B2A0', 'B2A0'),

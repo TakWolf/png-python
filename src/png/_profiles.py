@@ -5,7 +5,7 @@ from struct import unpack_from
 from png._exif import validate_exif_structure
 from png._icc_header import validate_header_fields
 from png._icc_collections import validate_dictionary, validate_response_curves
-from png._icc_lut import LUT_TYPES, curve_end, validate_lut, validate_lut_context
+from png._icc_lut import LUT_TYPES, _channels, curve_end, validate_lut, validate_lut_context
 from png._icc_mpet import MPET_TAGS, validate_mpet, validate_mpet_context
 from png._icc_misc import MISC_TYPES, V4_TAG_TYPES, validate_misc, validate_misc_context
 from png._icc_records import (
@@ -128,7 +128,6 @@ def validate_icc_tags(profile: bytes) -> None:
         if version == 4 and (kind in MISC_TYPES or signature == b'targ'):
             validate_misc_context(profile, signature, memoryview(profile)[offset:offset + size])
         if version == 4 and signature == b'resp':
-            from png._icc_lut import _channels
             if unpack_from('>H', profile, offset + 8)[0] != _channels(profile[16:20]):
                 raise PngValidationError('ICC response curve channels disagree with the device')
 
@@ -149,7 +148,8 @@ def validate_icc_tags(profile: bytes) -> None:
                     tag in tags for tag in (b'A2B0', b'A2B1', b'A2B2', b'B2A0', b'B2A1', b'B2A2')
             ):
                 raise PngValidationError('ICC v2 Lab display requires an A2B or B2A LUT tag')
-        elif _ICC_MATRIX_TAGS.issubset(tags) and profile[20:24] == b'XYZ ':
+        elif (_channels(profile[16:20]) == 3 and _ICC_MATRIX_TAGS.issubset(tags)
+              and profile[20:24] == b'XYZ '):
             pass  # The input/v4 display matrix model is an alternative to a LUT.
         else:
             required.add(b'A2B0')
