@@ -102,7 +102,52 @@ def test_exif_image_directory_chain_is_distinct_from_tiff_structure():
 @pytest.mark.parametrize(('tag', 'kind', 'count'), [(0x9000, 2, 4), (0x9000, 7, 3),
                                                   (0xA001, 4, 1), (0xA002, 3, 2), (0x010E, 7, 1)])
 def test_present_exif_standard_fields_have_their_declared_types(tag, kind, count):
-    metadata = PngExif(_tiff([(tag, kind, count, bytes(4))]))
+    raw = _tiff([(tag, kind, count, bytes(4))])
+    if tag >= 0x9000:
+        raw = _tiff([(0x8769, 4, 1, pack('>I', 26))], tail=raw[8:])
+    metadata = PngExif(raw)
     metadata.validate_profile_structure()
     with pytest.raises(PngValidationError, match='Exif'):
         metadata.validate_profile_tags()
+
+
+def _child_ifd(pointer, entries):
+    child = _tiff(entries)[8:]
+    return _tiff([(pointer, 4, 1, pack('>I', 26))], tail=child)
+
+
+def test_ifd_namespaces_do_not_confuse_gps_and_interoperability():
+    # Tag 1 means a fixed two-byte latitude reference in GPS, but variable
+    # InteroperabilityIndex text in the interoperability namespace.
+    gps = _child_ifd(0x8825, [(0, 1, 4, bytes((2, 4, 0, 0))), (1, 2, 2, b'N\0\0\0')])
+    PngExif(gps).validate_profile_tags()
+    interop = _child_ifd(0xA005, [(1, 2, 4, b'R98\0')])
+    PngExif(interop).validate_profile_tags()
+    bad = _child_ifd(0x8825, [(0, 1, 4, bytes((2, 4, 0, 0))), (1, 2, 4, b'R98\0')])
+    with pytest.raises(PngValidationError, match='type or count'):
+        PngExif(bad).validate_profile_tags()
+
+
+def test_exif_legacy_gain_control_and_current_version_types():
+    for version, kind, value in [(b'0232', 3, b'\0\1\0\0'), (b'0300', 5, pack('>I', 56))]:
+        data = _child_ifd(0x8769, [(0x9000, 7, 4, version), (0xA407, kind, 1, value)])
+        if kind == 5:
+            data += pack('>II', 1, 1)
+        PngExif(data).validate_profile_tags()
+    with pytest.raises(PngValidationError, match='type or count'):
+        PngExif(_child_ifd(0x8769, [(0x9000, 7, 4, b'0300'), (0xA407, 3, 1, b'\0\1\0\0')])).validate_profile_tags()
+
+
+@pytest.mark.parametrize('pointer,entries', [
+    (0x8769, [(0xA001, 3, 1, b'\0\1\0\0')]),
+    (0x8825, [(1, 2, 2, b'N\0\0\0')]),
+    (0x8825, [(0, 1, 4, bytes((2, 4, 0, 0))), (1, 2, 2, b'X\0\0\0')]),
+])
+def test_exif_ifd_version_and_reference_dependencies(pointer, entries):
+    with pytest.raises(PngValidationError, match='Exif'):
+        PngExif(_child_ifd(pointer, entries)).validate_profile_tags()
+
+
+def test_exif_utf8_bom_is_forbidden():
+    with pytest.raises(PngValidationError, match='BOM'):
+        PngExif(_tiff([(0x010E, 129, 4, b'\xef\xbb\xbf\0')])).validate_profile_structure()

@@ -2,6 +2,7 @@
 
 from struct import unpack_from
 
+from png._exif_fields import validate_fields
 from png.error import PngUnsupportedError, PngValidationError
 
 
@@ -35,16 +36,17 @@ def validate_exif_structure(profile: bytes, *, check_fields: bool = False) -> No
             following = uint32(following + 2 + 12 * count)
         if following:
             raise PngValidationError('Exif APP1 permits only the primary and thumbnail image IFDs')
-    states: dict[int, int] = {}
-    pending = [(first, False)]
+    states: dict[tuple[int, str], int] = {}
+    pending = [(first, False, 'image')]
     while pending:
-        offset, leaving = pending.pop()
+        offset, leaving, role = pending.pop()
+        key = (offset, role)
         if leaving:
-            states[offset] = 2
+            states[key] = 2
             continue
-        if states.get(offset) == 1:
+        if states.get(key) == 1:
             raise PngValidationError('Exif IFD pointers contain a cycle')
-        if states.get(offset) == 2:
+        if states.get(key) == 2:
             continue  # Sharing an entire already-checked directory is harmless.
         extent(offset, 2, 'IFD')
         count, = unpack_from(endian + 'H', profile, offset)
@@ -52,10 +54,11 @@ def validate_exif_structure(profile: bytes, *, check_fields: bool = False) -> No
             raise PngValidationError('Exif IFD must contain at least one entry')
         size = 2 + count * 12 + 4
         extent(offset, size, 'IFD table')
-        states[offset] = 1
-        pending.append((offset, True))
+        states[key] = 1
+        pending.append((offset, True, role))
         children = []
         previous_tag = -1
+        fields = {}
         thumbnail = {}
         image_data = {}
         for index in range(count):
@@ -70,13 +73,14 @@ def validate_exif_structure(profile: bytes, *, check_fields: bool = False) -> No
             if value_size > 4:
                 extent(uint32(entry + 8), value_size, 'field data')
             value_start = uint32(entry + 8) if value_size > 4 else entry + 8
-            if check_fields:
-                _validate_field(profile, endian, tag, kind, number, value_start)
+            fields[tag] = (kind, number, value_start)
             if kind in (2, 129):
                 value = profile[value_start:value_start + value_size]
                 if not value or value[-1] != 0:
                     raise PngValidationError('Exif ASCII/UTF-8 fields require a null terminator')
                 try:
+                    if kind == 129 and value.startswith(b'\xef\xbb\xbf'):
+                        raise PngValidationError('Exif UTF-8 must not contain a BOM')
                     value.decode('ascii' if kind == 2 else 'utf-8')
                 except UnicodeDecodeError as error:
                     raise PngValidationError('Exif text field has invalid character encoding') from error
@@ -90,9 +94,11 @@ def validate_exif_structure(profile: bytes, *, check_fields: bool = False) -> No
                 value = uint32(entry + 8)
                 if tag in _EXIF_IFD_POINTERS:
                     if value:
-                        children.append(value)
+                        children.append((value, {0x8769: 'exif', 0x8825: 'gps', 0xA005: 'interop'}[tag]))
                 else:
                     thumbnail[tag] = value
+        if check_fields:
+            validate_fields(profile, endian, role, fields)
         if thumbnail:
             if set(thumbnail) != {0x0201, 0x0202} or not thumbnail[0x0202]:
                 raise PngValidationError('Exif JPEG thumbnail requires an offset and nonzero length')
@@ -117,28 +123,5 @@ def validate_exif_structure(profile: bytes, *, check_fields: bool = False) -> No
                     raise PngValidationError('Exif strip/tile image data exceeds the profile')
         following = uint32(offset + 2 + count * 12)
         if following:
-            children.append(following)
-        pending.extend((child, False) for child in reversed(children))
-
-
-def _validate_field(profile: bytes, endian: str, tag: int, kind: int, count: int, start: int) -> None:
-    # Presence requirements depend on the source image and IFD purpose. These
-    # rules validate present standard fields without inventing missing history.
-    scalar_types = {
-        0x0100: (3, 4), 0x0101: (3, 4), 0x0103: (3,), 0x0106: (3,),
-        0x0112: (3,), 0x0115: (3,), 0x0116: (3, 4), 0x011A: (5,), 0x011B: (5,),
-        0x011C: (3,), 0x0128: (3,), 0x0213: (3,), 0xA001: (3,), 0xA002: (3, 4), 0xA003: (3, 4),
-    }
-    fixed = {0x0132: (2, 20), 0x9000: (7, 4), 0x9003: (2, 20), 0x9004: (2, 20),
-             0xA000: (7, 4), 0x013E: (5, 2), 0x013F: (5, 6), 0x0211: (5, 3),
-             0x0212: (3, 2), 0x0214: (5, 6)}
-    if tag in scalar_types and (kind not in scalar_types[tag] or count != 1):
-        raise PngValidationError(f'Exif field {tag:#06x} has an invalid type or count')
-    if tag in fixed and (kind, count) != fixed[tag]:
-        raise PngValidationError(f'Exif field {tag:#06x} has an invalid type or count')
-    if tag in (0x010E, 0x010F, 0x0110, 0x0131, 0x013B) and kind not in (2, 129):
-        raise PngValidationError('Exif descriptive fields require ASCII or UTF-8')
-    if tag == 0x0112 and not 1 <= unpack_from(endian + 'H', profile, start)[0] <= 8:
-        raise PngValidationError('Exif Orientation must be between 1 and 8')
-    if tag == 0x011C and unpack_from(endian + 'H', profile, start)[0] not in (1, 2):
-        raise PngValidationError('Exif PlanarConfiguration must be one or two')
+            children.append((following, role))
+        pending.extend((child, False, child_role) for child, child_role in reversed(children))
