@@ -5,7 +5,10 @@ from struct import unpack_from
 from png._icc_header import validate_header_fields
 from png._icc_lut import LUT_TYPES, curve_end, validate_lut, validate_lut_context
 from png._icc_mpet import MPET_TAGS, validate_mpet, validate_mpet_context
-from png._icc_records import validate_named_colors, validate_profile_identifiers, validate_profile_sequence
+from png._icc_records import (
+    validate_colorant_context, validate_colorant_table, validate_named_colors,
+    validate_profile_identifiers, validate_profile_sequence,
+)
 from png._icc_text import ascii_terminated, description_end, multilingual_end
 from png.error import PngUnsupportedError, PngValidationError
 
@@ -97,6 +100,8 @@ def validate_icc_tags(profile: bytes) -> None:
             allowed = (b'mft1', b'mft2', b'mBA ') if version == 4 else (b'mft1', b'mft2')
         elif signature in (b'pseq', b'ncl2') or (version == 4 and signature == b'psid'):
             allowed = (signature,)
+        elif version == 4 and signature in (b'clrt', b'clot'):
+            allowed = (b'clrt',)
         elif version == 4 and signature in MPET_TAGS:
             allowed = (b'mpet',)
         if allowed is not None and kind not in allowed:
@@ -109,6 +114,8 @@ def validate_icc_tags(profile: bytes) -> None:
             validate_lut_context(profile, signature, memoryview(profile)[offset:offset + size])
         elif kind == b'mpet':
             validate_mpet_context(profile, signature, memoryview(profile)[offset:offset + size])
+        elif version == 4 and kind == b'clrt':
+            validate_colorant_context(profile, signature, memoryview(profile)[offset:offset + size])
 
     required = {b'desc', b'cprt'}
     if profile_class != b'link':
@@ -158,6 +165,8 @@ def _validate_icc_tag_data(data: bytes) -> None:
         validate_mpet(data)
     elif kind == b'ncl2':
         validate_named_colors(data)
+    elif kind == b'clrt':
+        validate_colorant_table(data)
     elif kind == b'pseq':
         validate_profile_sequence(data)
     elif kind == b'psid':

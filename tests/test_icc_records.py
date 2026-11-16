@@ -7,12 +7,96 @@ from struct import pack, unpack_from
 import pytest
 
 from png import PngDocument, PngIccProfile, PngImage, PngUnsupportedError, PngValidationError
-from png._icc_records import validate_named_colors, validate_profile_identifiers, validate_profile_sequence
+from png._icc_records import (
+    validate_colorant_context, validate_colorant_table, validate_named_colors,
+    validate_profile_identifiers, validate_profile_sequence,
+)
 
 
 def _name(value: bytes) -> bytes:
     assert len(value) < 32
     return value + bytes(32 - len(value))
+
+
+def _colorants(names: tuple[bytes, ...]) -> bytes:
+    return (b'clrt' + bytes(4) + pack('>I', len(names))
+            + b''.join(_name(name) + pack('>3H', 0, 32768, 65535) for name in names))
+
+
+@pytest.mark.parametrize('names', [(), (b'',), (b'Black',), (b'Red', b'Green', b'Blue'),
+                                 (b'A' * 31,), (b'Gray', b'gray'), (b'Tab\tName',)])
+def test_colorant_table_names_and_exact_record_sizes(names: tuple[bytes, ...]) -> None:
+    validate_colorant_table(_colorants(names))
+
+
+@pytest.mark.parametrize('damage', ['short_header', 'reserved', 'count', 'truncated', 'extra',
+                                   'unterminated', 'ascii', 'unused', 'duplicate'])
+def test_colorant_table_bad_names_and_counts(damage: str) -> None:
+    data = _colorants((b'Red', b'Green', b'Blue'))
+    if damage == 'short_header':
+        data = data[:11]
+    elif damage == 'reserved':
+        data = _u32(data, 4, 1)
+    elif damage == 'count':
+        data = _u32(data, 8, 0xFFFFFFFF)
+    elif damage == 'truncated':
+        data = data[:-1]
+    elif damage == 'extra':
+        data += bytes(1)
+    elif damage == 'unterminated':
+        data = data[:12] + b'A' * 32 + data[44:]
+    elif damage == 'ascii':
+        data = data[:12] + b'\x80' + data[13:]
+    elif damage == 'unused':
+        data = data[:43] + b'\x01' + data[44:]
+    else:
+        data = data[:50] + _name(b'Red') + data[82:]
+    with pytest.raises(PngValidationError, match='ICC'):
+        validate_colorant_table(data)
+
+
+@pytest.mark.parametrize(('signature', 'device', 'pcs', 'profile_class', 'count', 'valid'), [
+    (b'clrt', b'RGB ', b'XYZ ', b'mntr', 3, True),
+    (b'clrt', b'GRAY', b'XYZ ', b'mntr', 1, True),
+    (b'clrt', b'CMYK', b'Lab ', b'prtr', 4, True),
+    (b'clrt', b'FCLR', b'Lab ', b'prtr', 15, True),
+    (b'clrt', b'RGB ', b'XYZ ', b'mntr', 0, False),
+    (b'clrt', b'RGB ', b'XYZ ', b'mntr', 2, False),
+    (b'clrt', b'GRAY', b'XYZ ', b'mntr', 3, False),
+    (b'clrt', b'GRAY', b'RGB ', b'link', 1, True),
+    (b'clot', b'GRAY', b'RGB ', b'link', 3, True),
+    (b'clot', b'GRAY', b'RGB ', b'link', 1, False),
+    (b'clot', b'RGB ', b'GRAY', b'link', 1, True),
+    (b'clot', b'RGB ', b'XYZ ', b'mntr', 3, False),
+])
+def test_colorant_table_context_uses_the_correct_side(
+        signature: bytes, device: bytes, pcs: bytes, profile_class: bytes, count: int, valid: bool,
+) -> None:
+    # Context-only header vectors, not complete color profiles.
+    header = bytearray(128)
+    header[12:24] = profile_class + device + pcs
+    data = memoryview(_colorants(tuple(str(index).encode('ascii') for index in range(count))))
+    if valid:
+        validate_colorant_context(bytes(header), signature, data)
+    else:
+        with pytest.raises(PngValidationError, match='ICC'):
+            validate_colorant_context(bytes(header), signature, data)
+
+
+@pytest.mark.parametrize('tag', [b'clrt', b'clot'])
+def test_v4_colorant_tags_require_registered_type(assets_dir: Path, tag: bytes) -> None:
+    profile = assets_dir.joinpath('icc', 'sRGB_v4_ICC_preference.icc').read_bytes()
+    profile = _with_record(profile, tag, _named())
+    with pytest.raises(PngValidationError, match='invalid tag type'):
+        PngIccProfile('Colorant type vector', profile).validate_profile_tags()
+
+
+@pytest.mark.parametrize('tag', [b'clrt', b'clot'])
+def test_v4_colorant_context_is_checked_within_full_profile(assets_dir: Path, tag: bytes) -> None:
+    profile = assets_dir.joinpath('icc', 'sRGB_v4_ICC_preference.icc').read_bytes()
+    profile = _with_record(profile, tag, _colorants((b'Black',)))
+    with pytest.raises(PngValidationError, match='ICC'):
+        PngIccProfile('Colorant context vector', profile).validate_profile_tags()
 
 
 def _named(coordinates: int = 3, names: tuple[bytes, ...] = (b'Red', b'Blue')) -> bytes:
@@ -291,13 +375,15 @@ def _with_record(profile: bytes, tag: bytes, payload: bytes) -> bytes:
 
 
 @pytest.mark.parametrize('version', [2, 4])
-@pytest.mark.parametrize('tag', [b'ncl2', b'pseq', b'psid'])
+@pytest.mark.parametrize('tag', [b'ncl2', b'pseq', b'psid', b'clrt'])
 def test_profile_record_tags_pass_complete_profile_checks(assets_dir: Path, version: int, tag: bytes) -> None:
     profile = assets_dir.joinpath('icc', 'sRGB2014.icc' if version == 2 else 'sRGB_v4_ICC_preference.icc').read_bytes()
     text = _description(b'Model') if version == 2 else _localized('Model')
     payload = _named() if tag == b'ncl2' else _sequence([(text, text)])
     if tag == b'psid':
         payload = _identifiers((_localized('Model'),))
+    elif tag == b'clrt':
+        payload = _colorants((b'Red', b'Green', b'Blue'))
     PngIccProfile('Record layout vector', _with_record(profile, tag, payload)).validate_profile_tags()
 
 
@@ -316,7 +402,7 @@ def test_private_tag_with_identifier_type_checks_its_records(icc_profile_bytes: 
 
 
 @pytest.mark.parametrize('representation', ['image', 'document'])
-@pytest.mark.parametrize('tag', [b'ncl2', b'pseq', b'psid'])
+@pytest.mark.parametrize('tag', [b'ncl2', b'pseq', b'psid', b'clrt'])
 @pytest.mark.parametrize('damaged', [False, True])
 def test_icc_record_roundtrip_and_write_protection(
         icc_profile_bytes: bytes, png_suite_dir: Path, tmp_path: Path,
@@ -325,6 +411,8 @@ def test_icc_record_roundtrip_and_write_protection(
     payload = _named() if tag == b'ncl2' else _sequence([(_description(), _localized('Model'))])
     if tag == b'psid':
         payload = _identifiers((_localized('Model'),))
+    elif tag == b'clrt':
+        payload = _colorants((b'Red', b'Green', b'Blue'))
     if damaged:
         payload = _u32(payload, 12 if tag == b'ncl2' else 8, 0xFFFFFFFF)
     profile = _with_record(icc_profile_bytes, tag, payload)

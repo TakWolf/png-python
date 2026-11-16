@@ -2,6 +2,7 @@
 
 from struct import unpack_from
 
+from png._icc_lut import _channels
 from png._icc_text import embedded_text_end, multilingual_end
 from png.error import PngValidationError
 
@@ -30,6 +31,33 @@ def _fixed_name(data: bytes, start: int) -> None:
         raise PngValidationError('ICC ncl2 names require null-terminated 7-bit ASCII within 32 bytes')
     # The specification does not require unused bytes following the terminator
     # to be zero. They are not part of the name and are preserved as stored.
+
+
+def validate_colorant_table(data: bytes) -> None:
+    _header(data, 12)
+    count, = unpack_from('>I', data, 8)
+    if len(data) != 12 + 38 * count:
+        raise PngValidationError('ICC clrt colorant count disagrees with its size')
+    names = set()
+    for index in range(count):
+        field = data[12 + 38 * index:44 + 38 * index]
+        terminator = field.find(b'\0')
+        if terminator < 0 or any(value > 127 for value in field[:terminator]) or any(field[terminator + 1:]):
+            raise PngValidationError('ICC clrt names require null-terminated ASCII and zero unused bytes')
+        name = field[:terminator]
+        if name in names:
+            raise PngValidationError('ICC clrt colorant names must be unique')
+        names.add(name)
+
+
+def validate_colorant_context(profile: bytes, signature: bytes, data: memoryview) -> None:
+    if signature not in (b'clrt', b'clot'):
+        return
+    if signature == b'clot' and profile[12:16] != b'link':
+        raise PngValidationError('ICC clot is only permitted in DeviceLink profiles')
+    space = profile[20:24] if signature == b'clot' else profile[16:20]
+    if unpack_from('>I', data, 8)[0] != _channels(space):
+        raise PngValidationError(f'ICC {signature!r} colorant count disagrees with the profile')
 
 
 def validate_profile_sequence(data: bytes) -> None:
