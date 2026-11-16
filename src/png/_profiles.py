@@ -5,6 +5,7 @@ from struct import unpack_from
 from png._icc_header import validate_header_fields
 from png._icc_lut import LUT_TYPES, curve_end, validate_lut, validate_lut_context
 from png._icc_mpet import MPET_TAGS, validate_mpet, validate_mpet_context
+from png._icc_misc import MISC_TYPES, V4_TAG_TYPES, validate_misc, validate_misc_context
 from png._icc_records import (
     validate_colorant_context, validate_colorant_table, validate_named_colors,
     validate_profile_identifiers, validate_profile_sequence,
@@ -102,6 +103,8 @@ def validate_icc_tags(profile: bytes) -> None:
             allowed = (signature,)
         elif version == 4 and signature in (b'clrt', b'clot'):
             allowed = (b'clrt',)
+        elif version == 4 and signature in V4_TAG_TYPES:
+            allowed = V4_TAG_TYPES[signature]
         elif version == 4 and signature in MPET_TAGS:
             allowed = (b'mpet',)
         if allowed is not None and kind not in allowed:
@@ -116,6 +119,8 @@ def validate_icc_tags(profile: bytes) -> None:
             validate_mpet_context(profile, signature, memoryview(profile)[offset:offset + size])
         elif version == 4 and kind == b'clrt':
             validate_colorant_context(profile, signature, memoryview(profile)[offset:offset + size])
+        if version == 4 and kind in MISC_TYPES:
+            validate_misc_context(profile, signature, memoryview(profile)[offset:offset + size])
 
     required = {b'desc', b'cprt'}
     if profile_class != b'link':
@@ -149,6 +154,11 @@ def validate_icc_tags(profile: bytes) -> None:
     elif profile_class == b'nmcl':
         required.add(b'ncl2')
     missing = required.difference(tags)
+    if version == 4:
+        if profile_class in (b'prtr', b'link') and profile[17:20] == b'CLR':
+            missing.update({b'clrt'}.difference(tags))
+        if profile_class == b'link' and profile[21:24] == b'CLR':
+            missing.update({b'clot'}.difference(tags))
     if missing:
         raise PngValidationError(f'ICC required tags are missing: {sorted(missing)!r}')
 
@@ -156,7 +166,9 @@ def validate_icc_tags(profile: bytes) -> None:
 def _validate_icc_tag_data(data: bytes) -> None:
     kind = data[:4]
     size = len(data)
-    if kind in (b'curv', b'para'):
+    if kind in MISC_TYPES:
+        validate_misc(data)
+    elif kind in (b'curv', b'para'):
         if curve_end(data) != size:
             raise PngValidationError('ICC curve count does not match tag size')
     elif kind in LUT_TYPES:

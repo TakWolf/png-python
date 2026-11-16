@@ -48,6 +48,9 @@ def v4_matrix(icc_profile_bytes: bytes, v4_profile: bytes) -> bytes:
     tags = _tags(icc_profile_bytes)
     localized = _tags(v4_profile)
     tags.update({name: localized[name] for name in (b'desc', b'cprt')})
+    for name in (b'dmnd', b'dmdd', b'vued'):
+        if name in tags:
+            tags[name] = localized[b'desc']
     return _rebuild(icc_profile_bytes, tags, version=4)
 
 
