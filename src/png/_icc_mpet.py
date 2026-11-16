@@ -6,7 +6,6 @@ from struct import iter_unpack, unpack_from
 from png._icc_lut import _channels
 from png.error import PngUnsupportedError, PngValidationError
 
-
 MPET_TAGS = frozenset(b'D2B' + bytes((intent,)) for intent in b'0123') | frozenset(
     b'B2D' + bytes((intent,)) for intent in b'0123'
 )

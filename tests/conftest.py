@@ -1,6 +1,6 @@
+import zlib
 from pathlib import Path
 from struct import pack, unpack_from
-import zlib
 
 import pytest
 

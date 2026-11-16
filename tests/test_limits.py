@@ -1,8 +1,8 @@
+import zlib
 from copy import deepcopy
 from io import BytesIO
 from pathlib import Path
 from struct import pack
-import zlib
 
 import pytest
 
@@ -169,7 +169,13 @@ def test_from_document_checks_policy_before_decoding_pixels(png_suite_dir: Path,
         ('max_total_bytes', 32),
         ('max_chunks', 0),
     ]:
-        _assert_limit(lambda: PngImage.from_document(document, limits=PngReadLimits(**{name: maximum})), name, maximum)
+        _assert_limit(
+            lambda name=name, maximum=maximum: PngImage.from_document(
+                document, limits=PngReadLimits(**{name: maximum})
+            ),
+            name,
+            maximum,
+        )
 
 
 @pytest.mark.parametrize('default_in_animation', [False, True])

@@ -25,7 +25,7 @@ def test_exif_variable_payload_layouts(endian):
 
 
 def test_exif_multicode_versions_and_undefined_text():
-    validate_binary(0x9286, b'UNICODE\0' + '字'.encode('utf-8'), '>', b'0300')
+    validate_binary(0x9286, b'UNICODE\0' + '字'.encode(), '>', b'0300')
     validate_binary(0x9286, b'UNICODE\0' + '字'.encode('utf-16-be'), '>', b'0232')
     validate_binary(0x9286, b'ASCII\0\0\0hello', '>', b'0300')
     validate_binary(0x9286, bytes(8) + b'\xff', '>', b'0300')

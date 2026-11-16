@@ -1,6 +1,6 @@
 from collections.abc import Iterator
-from fractions import Fraction
 from copy import deepcopy
+from fractions import Fraction
 from typing import TYPE_CHECKING
 
 from png.animation import PngRenderedFrame

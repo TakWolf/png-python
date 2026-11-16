@@ -1,8 +1,8 @@
 """PNG Third Edition sections 7-10: samples, Adam7, filters and zlib."""
 
+import zlib
 from collections.abc import Iterable, Iterator
 from struct import iter_unpack, pack
-import zlib
 
 from png._validation import check_integer
 from png.error import PngParseError

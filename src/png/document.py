@@ -4,9 +4,9 @@ from io import BytesIO
 from os import PathLike
 from typing import BinaryIO
 
-from png._stream import read_exact, write_all
 from png._limits import ReadBudget
-from png._structure import ChunkStructure, UNDERSTOOD_TYPES, validate_structure
+from png._stream import read_exact, write_all
+from png._structure import UNDERSTOOD_TYPES, ChunkStructure, validate_structure
 from png.chunk import PngChunk
 from png.error import PngParseError, PngValidationError
 from png.header import PngHeader

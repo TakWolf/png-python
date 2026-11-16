@@ -1,8 +1,8 @@
+import zlib
 from copy import deepcopy
 from io import BytesIO
 from pathlib import Path
 from struct import pack
-import zlib
 
 import pytest
 

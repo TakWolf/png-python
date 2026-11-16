@@ -1,6 +1,6 @@
-from io import BytesIO
 import hashlib
 import json
+from io import BytesIO
 from pathlib import Path
 from struct import pack, unpack_from
 

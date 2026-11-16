@@ -6,8 +6,8 @@ from struct import pack, unpack
 from typing import BinaryIO
 from zlib import crc32
 
-from png._stream import read_exact, write_all
 from png._limits import ReadBudget
+from png._stream import read_exact, write_all
 from png.error import PngCrcError, PngParseError, PngValidationError
 from png.limits import PngReadLimits
 

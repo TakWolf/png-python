@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from fractions import Fraction
 import re
+from fractions import Fraction
 from struct import pack, unpack
 
 from png._metadata import PngMetadata, _data, _decode, _keyword, _split_keyword, _string

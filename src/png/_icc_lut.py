@@ -5,7 +5,6 @@ from struct import unpack_from
 
 from png.error import PngValidationError
 
-
 LUT_TYPES = frozenset((b'mft1', b'mft2', b'mAB ', b'mBA '))
 _IDENTITY = (65536, 0, 0, 0, 65536, 0, 0, 0, 65536)
 

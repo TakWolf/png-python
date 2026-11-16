@@ -1,9 +1,9 @@
-from copy import deepcopy
 import hashlib
 import json
-from pathlib import Path
 import runpy
 import zlib
+from copy import deepcopy
+from pathlib import Path
 
 import pytest
 

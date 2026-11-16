@@ -8,7 +8,6 @@ import pytest
 from png import PngDocument, PngIccProfile, PngImage, PngValidationError
 from tests.test_icc_tags import _rebuild, _tags
 
-
 _TECHNOLOGIES = (
     b'fscn',
     b'dcam',

@@ -2,12 +2,12 @@
 
 from struct import unpack_from
 
-from png._exif import validate_exif_structure
-from png._icc_header import validate_header_fields
+from png._exif import validate_exif_structure as validate_exif_structure
 from png._icc_collections import validate_dictionary, validate_response_curves
+from png._icc_header import validate_header_fields
 from png._icc_lut import LUT_TYPES, _channels, curve_end, validate_lut, validate_lut_context
-from png._icc_mpet import MPET_TAGS, validate_mpet, validate_mpet_context
 from png._icc_misc import MISC_TYPES, V4_TAG_TYPES, validate_misc, validate_misc_context
+from png._icc_mpet import MPET_TAGS, validate_mpet, validate_mpet_context
 from png._icc_records import (
     validate_colorant_context,
     validate_colorant_table,

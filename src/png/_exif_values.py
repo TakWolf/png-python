@@ -5,7 +5,6 @@ from struct import unpack_from
 
 from png.error import PngValidationError
 
-
 EXIF_SHORT_VALUES = {
     0xA001: (1, 65535),
     0x8822: tuple(range(9)),

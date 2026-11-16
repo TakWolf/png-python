@@ -1,14 +1,14 @@
+import zlib
 from copy import deepcopy
 from fractions import Fraction
 from pathlib import Path
 from struct import pack
-import zlib
 
 import pytest
 
 from png import (
-    PngChunk,
     PngChromaticities,
+    PngChunk,
     PngCicp,
     PngCompressedText,
     PngContentLightLevel,
@@ -20,13 +20,13 @@ from png import (
     PngImage,
     PngInternationalText,
     PngMasteringDisplayColorVolume,
+    PngParseError,
     PngPhysicalDimensions,
     PngPhysicalUnit,
     PngRenderingIntent,
     PngSrgb,
     PngText,
     PngTime,
-    PngParseError,
     PngValidationError,
 )
 

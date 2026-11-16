@@ -170,6 +170,7 @@ INTEROP_FIELDS = {
 
 def validate_fields(profile: bytes, endian: str, role: str, fields: dict[int, tuple[int, int, int]]) -> None:
     from struct import unpack_from
+
     from png.error import PngValidationError
 
     rules = {'image': IMAGE_FIELDS, 'exif': EXIF_FIELDS, 'gps': GPS_FIELDS, 'interop': INTEROP_FIELDS}[role]
@@ -177,7 +178,7 @@ def validate_fields(profile: bytes, endian: str, role: str, fields: dict[int, tu
     if role == 'exif' and 0x9000 in fields:
         _, _, start = fields[0x9000]
         version = profile[start : start + 4]
-    for tag, (kind, count, start) in fields.items():
+    for tag, (kind, count, _start) in fields.items():
         rule = rules.get(tag)
         if rule is None:
             continue

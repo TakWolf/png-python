@@ -3,9 +3,9 @@
 This module does not decompress image data or interpret all metadata payloads.
 """
 
-from png.chunk import PngChunk
-from png._limits import ReadBudget
 from png._apng import scan_animation
+from png._limits import ReadBudget
+from png.chunk import PngChunk
 from png.error import PngValidationError
 from png.format import PngColorType
 from png.header import PngHeader

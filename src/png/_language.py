@@ -4,7 +4,7 @@ Case and deprecated spellings remain unchanged in the public model. Extension
 payload semantics (such as Unicode locale keys) belong to their own standards.
 """
 
-from png._language_data import EXTLANG_PREFIXES, EXTENSION_SINGLETONS, GRANDFATHERED, RANGES, SUBTAGS
+from png._language_data import EXTENSION_SINGLETONS, EXTLANG_PREFIXES, GRANDFATHERED, RANGES, SUBTAGS
 from png.error import PngValidationError
 
 

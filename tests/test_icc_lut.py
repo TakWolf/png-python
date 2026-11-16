@@ -9,7 +9,6 @@ import pytest
 from png import PngDocument, PngIccProfile, PngImage, PngValidationError
 from png._icc_lut import validate_lut, validate_lut_context
 
-
 _IDENTITY = pack('>9i', 65536, 0, 0, 0, 65536, 0, 0, 0, 65536)
 
 

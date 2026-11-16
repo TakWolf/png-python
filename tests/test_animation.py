@@ -1,9 +1,9 @@
-from copy import deepcopy
-from fractions import Fraction
 import hashlib
 import json
-from pathlib import Path
 import re
+from copy import deepcopy
+from fractions import Fraction
+from pathlib import Path
 from struct import pack, unpack
 
 import pytest
@@ -63,7 +63,7 @@ def test_wpt_animation_roundtrip(name: str) -> None:
     assert (default is None) == (actual_default is None)
     if default is not None:
         assert default.to_chunk(0).data == actual_default.to_chunk(0).data
-    for source, actual in zip(original.animation.frames, restored.animation.frames):
+    for source, actual in zip(original.animation.frames, restored.animation.frames, strict=True):
         assert source.bitmap == actual.bitmap
         assert source.control.to_chunk(0).data == actual.control.to_chunk(0).data
 
@@ -133,7 +133,7 @@ def test_apng_snapshots_inherit_pixel_dimensions_without_resampling(png_suite_di
         image.metadata.append(original)
     rendered = list(image.render_frames())
     assert len(rendered) == len(baseline) > 1
-    for frame, expected_bitmap in zip(rendered, baseline):
+    for frame, expected_bitmap in zip(rendered, baseline, strict=True):
         assert frame.image.dimensions == image.dimensions
         assert frame.image.bitmap == expected_bitmap
         assert frame.image.to_document().find_chunks(b'pHYs')[0].data == original_bytes

@@ -5,7 +5,6 @@ from struct import unpack_from
 from png._exif_fields import validate_fields
 from png.error import PngUnsupportedError, PngValidationError
 
-
 _TIFF_TYPE_SIZES = {1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8, 129: 1}
 _EXIF_IFD_POINTERS = frozenset((0x8769, 0x8825, 0xA005))
 
@@ -134,7 +133,7 @@ def validate_exif_structure(profile: bytes, *, check_fields: bool = False) -> No
             children.append((following, role))
         pending.extend((child, False, child_role) for child, child_role in reversed(children))
     if check_fields:
-        for (offset, role), fields in directories.items():
+        for (_offset, role), fields in directories.items():
             if role != 'image' or 0x8769 not in fields:
                 continue
             child = uint32(fields[0x8769][2])
@@ -148,7 +147,7 @@ def validate_exif_structure(profile: bytes, *, check_fields: bool = False) -> No
         root = directories.get((first, 'image'), {})
         source = directories.get((uint32(root[0x8769][2]), 'exif'), {}) if 0x8769 in root else {}
         version = profile[source[0x9000][2] : source[0x9000][2] + 4] if 0x9000 in source else b''
-        for (offset, role), fields in directories.items():
+        for (_offset, role), fields in directories.items():
             if role == 'gps':
                 for tag in (0x001B, 0x001C):
                     if tag in fields:

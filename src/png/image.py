@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from io import BytesIO
 from collections.abc import Iterable, Iterator
+from io import BytesIO
 from os import PathLike
 from struct import iter_unpack, pack
 from typing import BinaryIO
@@ -9,7 +9,7 @@ from typing import BinaryIO
 from png._apng import frame_header, scan_animation
 from png._limits import ReadBudget
 from png._pixels import decode_pixels, encode_pixels
-from png._structure import _BEFORE_PALETTE, _BEFORE_DATA
+from png._structure import _BEFORE_DATA, _BEFORE_PALETTE
 from png._validation import check_integer
 from png.animation import PngAnimation, PngFrame, PngRenderedFrame
 from png.chunk import PngChunk
@@ -20,9 +20,9 @@ from png.header import PngHeader
 from png.limits import PngReadLimits
 from png.metadata import (
     METADATA_TYPES,
-    PngMetadata,
     PngBackground,
     PngHistogram,
+    PngMetadata,
     PngSignificantBits,
     parse_metadata,
     validate_metadata_chunks,

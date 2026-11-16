@@ -23,7 +23,6 @@ from png import (
     PngValidationError,
 )
 
-
 VECTORS = [
     (PngOffset((-2147483648, 2147483647), PngOffsetUnit.MICROMETRE), bytes.fromhex('800000007fffffff01')),
     (
