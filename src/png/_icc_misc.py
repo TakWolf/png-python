@@ -17,6 +17,15 @@ V4_TAG_TYPES = {
     b'pre1': (b'mft1', b'mft2', b'mBA '), b'pre2': (b'mft1', b'mft2', b'mBA '),
 }
 
+# ICC.1:2022 9.2.39/9.2.48 Tables 27/28 and 9.2.49 Table 29.
+# These are tag-context values, not a whitelist for arbitrary signatureType data.
+_TECHNOLOGIES = frozenset((
+    b'fscn', b'dcam', b'rscn', b'ijet', b'twax', b'epho', b'esta', b'dsub',
+    b'rpho', b'fprn', b'vidm', b'vidc', b'pjtv', b'CRT ', b'PMD ', b'AMD ',
+    b'LCD ', b'OLED', b'KPCD', b'imgs', b'grav', b'offs', b'silk', b'flex',
+    b'mpfs', b'mpfr', b'dmpc', b'dcpj',
+))
+
 
 def validate_misc(data: bytes) -> None:
     kind, size = data[:4], len(data)
@@ -70,6 +79,10 @@ def validate_misc(data: bytes) -> None:
 
 
 def validate_misc_context(profile: bytes, signature: bytes, data: memoryview) -> None:
+    if signature == b'tech' and bytes(data[8:12]) not in _TECHNOLOGIES:
+        raise PngValidationError('ICC technology signature is not defined in ICC.1:2022')
+    if signature in (b'rig0', b'rig2') and data[8:12] != b'prmg':
+        raise PngValidationError('ICC reference medium gamut signature must be prmg in ICC.1:2022')
     if signature == b'clro' and unpack_from('>I', data, 8)[0] != _channels(profile[16:20]):
         raise PngValidationError('ICC colorant order count disagrees with the data color space')
     if signature == b'cicp':
