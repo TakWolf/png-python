@@ -5,7 +5,7 @@ from struct import unpack_from
 from png._icc_header import validate_header_fields
 from png._icc_lut import LUT_TYPES, curve_end, validate_lut, validate_lut_context
 from png._icc_mpet import MPET_TAGS, validate_mpet, validate_mpet_context
-from png._icc_records import validate_named_colors, validate_profile_sequence
+from png._icc_records import validate_named_colors, validate_profile_identifiers, validate_profile_sequence
 from png._icc_text import ascii_terminated, description_end, multilingual_end
 from png.error import PngUnsupportedError, PngValidationError
 
@@ -95,7 +95,7 @@ def validate_icc_tags(profile: bytes) -> None:
             allowed = (b'mft1', b'mft2', b'mAB ') if version == 4 else (b'mft1', b'mft2')
         elif signature in (b'B2A0', b'B2A1', b'B2A2', b'gamt'):
             allowed = (b'mft1', b'mft2', b'mBA ') if version == 4 else (b'mft1', b'mft2')
-        elif signature in (b'pseq', b'ncl2'):
+        elif signature in (b'pseq', b'ncl2') or (version == 4 and signature == b'psid'):
             allowed = (signature,)
         elif version == 4 and signature in MPET_TAGS:
             allowed = (b'mpet',)
@@ -160,6 +160,8 @@ def _validate_icc_tag_data(data: bytes) -> None:
         validate_named_colors(data)
     elif kind == b'pseq':
         validate_profile_sequence(data)
+    elif kind == b'psid':
+        validate_profile_identifiers(data)
     elif kind == b'XYZ ':
         if size < 20 or (size - 8) % 12:
             raise PngValidationError('ICC XYZ array has an invalid size')
