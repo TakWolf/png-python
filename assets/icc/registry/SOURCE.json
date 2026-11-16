@@ -1,0 +1,30 @@
+{
+  "retrieved": "2026-11-16",
+  "copyright": "International Color Consortium",
+  "files": [
+    {
+      "path": "cmm.json",
+      "source": "https://registry.color.org/cmm-signatures/cmm-signatures.csv",
+      "source_sha256": "6684cc01ec77039349bcb714b5936879b86ae77ccd7b3f63aa11788bcc1833ff",
+      "sha256": "d2c106af4ad2ab8251e1872962be4de0269a1c9139cff08622da173b0b7a82e5",
+      "records": 31,
+      "selection": "Signature columns only; original spelling retained, including inconsistencies. Contact information is omitted."
+    },
+    {
+      "path": "manufacturer.json",
+      "source": "https://registry.color.org/manufacturer-signatures/manufacturer-signatures.csv",
+      "source_sha256": "8df71c0ac6a970f79378359c6f21ca7c9a36ed3ae337a8143d88092c4be54952",
+      "sha256": "f0d73ba8e2e93ed79b7a3b08d668c32c22a93e17c7bd8a2b43cb86ffb1220a4c",
+      "records": 281,
+      "selection": "Signature columns only; original spelling retained, including inconsistencies. Contact information is omitted."
+    },
+    {
+      "path": "device.json",
+      "source": "https://registry.color.org/device-signatures/device-signatures.csv",
+      "source_sha256": "6efb5b26652b7a0a9b4f5ac8a4dc054bb09b4194abcbc4a50d9d92069bc42a0e",
+      "sha256": "53e18341dd3f5f3d32cfeecd570c6fd826457f81b90b69f68ba5185df9bcb5c2",
+      "records": 3071,
+      "selection": "Signature columns only; original spelling retained, including inconsistencies. Contact information is omitted."
+    }
+  ]
+}

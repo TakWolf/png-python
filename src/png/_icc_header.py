@@ -4,7 +4,7 @@ from hashlib import md5
 from struct import unpack_from
 
 from png._icc_lut import _channels
-from png.error import PngValidationError
+from png.error import PngUnsupportedError, PngValidationError
 
 
 def validate_header_fields(profile: bytes) -> None:
@@ -32,6 +32,8 @@ def validate_header_fields(profile: bytes) -> None:
     if tuple((value * 10000 + 32768) // 65536 for value in illuminant) != (9642, 10000, 8249):
         raise PngValidationError('ICC PCS illuminant must round to D50')
     if profile[8] == 4:
+        if profile[40:44] not in (bytes(4), b'APPL', b'MSFT', b'SGI ', b'SUNW'):
+            raise PngValidationError('ICC v4 primary platform uses an undefined signature')
         attributes, = unpack_from('>Q', profile, 56)
         if attributes & 0xFFFFFFF0:
             raise PngValidationError('ICC v4 device attribute reserved bits must be zero')
@@ -47,6 +49,31 @@ def validate_header_fields(profile: bytes) -> None:
             digest.update(part)
         if digest.digest() != profile[84:100]:
             raise PngValidationError('ICC Profile ID does not match the profile data')
+    if profile[8] == 4:
+        _validate_registrations(profile)
+
+
+def _validate_registrations(profile: bytes) -> None:
+    # ICC.1:2022 7.2.3/12/13 require registered signatures. 7.2.17 only
+    # recommends registration for the creator, so it is deliberately excluded.
+    from png._icc_registry_data import CMM, DEVICES, MANUFACTURERS
+
+    for name, signature, registered in (('CMM', profile[4:8], CMM),
+                                         ('manufacturer', profile[48:52], MANUFACTURERS)):
+        if any(signature) and signature not in registered:
+            raise PngUnsupportedError(
+                f'ICC {name} {signature!r} cannot be confirmed by the 2026-11-16 registry snapshot'
+            )
+    maker, model = profile[48:52], profile[52:56]
+    if any(model):
+        if any(maker):
+            known = (maker, model) in DEVICES
+        else:
+            known = any(registered_model == model for _, registered_model in DEVICES)
+        if not known:
+            raise PngUnsupportedError(
+                f'ICC device {maker!r}/{model!r} cannot be confirmed by the 2026-11-16 registry snapshot'
+            )
 
 
 def validate_png_embedding(profile: bytes) -> None:
