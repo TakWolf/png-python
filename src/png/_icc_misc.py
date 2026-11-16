@@ -47,6 +47,8 @@ def validate_misc(data: bytes) -> None:
         if unpack_from('>I', data, 32)[0] > 8:
             raise PngValidationError('ICC viewing illuminant is not defined')
     elif kind == b'cicp':
+        from png._color_codes import validate_code_points
+        validate_code_points(*data[8:12])
         if data[11] > 1:
             raise PngValidationError('ICC cicp full range flag must be zero or one')
     elif kind == b'clro':

@@ -3,6 +3,7 @@
 from struct import unpack_from
 
 from png._icc_header import validate_header_fields
+from png._icc_collections import validate_dictionary, validate_response_curves
 from png._icc_lut import LUT_TYPES, curve_end, validate_lut, validate_lut_context
 from png._icc_mpet import MPET_TAGS, validate_mpet, validate_mpet_context
 from png._icc_misc import MISC_TYPES, V4_TAG_TYPES, validate_misc, validate_misc_context
@@ -105,6 +106,8 @@ def validate_icc_tags(profile: bytes) -> None:
             allowed = (b'clrt',)
         elif version == 4 and signature in V4_TAG_TYPES:
             allowed = V4_TAG_TYPES[signature]
+        elif version == 4 and signature in (b'meta', b'resp'):
+            allowed = (b'dict',) if signature == b'meta' else (b'rcs2',)
         elif version == 4 and signature in MPET_TAGS:
             allowed = (b'mpet',)
         if allowed is not None and kind not in allowed:
@@ -121,6 +124,10 @@ def validate_icc_tags(profile: bytes) -> None:
             validate_colorant_context(profile, signature, memoryview(profile)[offset:offset + size])
         if version == 4 and kind in MISC_TYPES:
             validate_misc_context(profile, signature, memoryview(profile)[offset:offset + size])
+        if version == 4 and signature == b'resp':
+            from png._icc_lut import _channels
+            if unpack_from('>H', profile, offset + 8)[0] != _channels(profile[16:20]):
+                raise PngValidationError('ICC response curve channels disagree with the device')
 
     required = {b'desc', b'cprt'}
     if profile_class != b'link':
@@ -166,7 +173,11 @@ def validate_icc_tags(profile: bytes) -> None:
 def _validate_icc_tag_data(data: bytes) -> None:
     kind = data[:4]
     size = len(data)
-    if kind in MISC_TYPES:
+    if kind == b'dict':
+        validate_dictionary(data)
+    elif kind == b'rcs2':
+        validate_response_curves(data)
+    elif kind in MISC_TYPES:
         validate_misc(data)
     elif kind in (b'curv', b'para'):
         if curve_end(data) != size:

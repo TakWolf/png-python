@@ -140,6 +140,13 @@ class PngCicp(PngMetadata):
         return PngChunk(self.type, bytes((self.color_primaries, self.transfer_function,
                                          self.matrix_coefficients, self.video_full_range_flag)))
 
+    def validate_code_points(self) -> None:
+        """Reject reserved H.273 (07/2024) code points without changing fields."""
+        from png._color_codes import validate_code_points
+        self.validate()
+        validate_code_points(self.color_primaries, self.transfer_function,
+                             self.matrix_coefficients, self.video_full_range_flag)
+
 
 class PngMasteringDisplayColorVolume(PngMetadata):
     type = b'mDCV'
@@ -617,6 +624,8 @@ def validate_metadata_chunks(
                     metadata.validate_profile_tags()
                 elif isinstance(metadata, PngExif):
                     metadata.validate_profile_structure()
+                elif isinstance(metadata, PngCicp):
+                    metadata.validate_code_points()
             if chunk.type in parsed and chunk.type not in repeated:
                 raise PngValidationError(f'duplicate {chunk.type!r} metadata')
             if isinstance(metadata, PngSuggestedPalette):
