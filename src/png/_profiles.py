@@ -73,11 +73,13 @@ def validate_icc_tags(profile: bytes) -> None:
     validate_header_fields(profile)
     count, = unpack_from('>I', profile, 128)
     tags = {}
+    offsets = {}
     checked = set()
     for index in range(count):
         signature, offset, size = unpack_from('>4sII', profile, 132 + index * 12)
         kind = profile[offset:offset + 4]
         tags[signature] = kind
+        offsets[signature] = offset
         allowed = None
         if signature == b'desc':
             allowed = (b'mluc',) if version == 4 else (b'desc',)
@@ -163,6 +165,17 @@ def validate_icc_tags(profile: bytes) -> None:
         required.add(b'ncl2')
     missing = required.difference(tags)
     if version == 4:
+        if b'ciis' in tags:
+            state = profile[offsets[b'ciis'] + 8:offsets[b'ciis'] + 12]
+            if state not in (b'scoe', b'sape', b'fpce', b'rhoc', b'rpoc'):
+                raise PngValidationError('ICC colorimetric image state is reserved')
+            missing.update({b'view'}.difference(tags))
+            if state in (b'rhoc', b'rpoc'):
+                missing.update({b'chad'}.difference(tags))
+        if profile_class == b'mntr' and b'wtpt' in tags:
+            white = unpack_from('>3i', profile, offsets[b'wtpt'] + 8)
+            if tuple((value * 10000 + 32768) // 65536 for value in white) != (9642, 10000, 8249):
+                raise PngValidationError('ICC v4 display media white must be the PCS illuminant')
         if profile_class in (b'prtr', b'link') and profile[17:20] == b'CLR':
             missing.update({b'clrt'}.difference(tags))
         if profile_class == b'link' and profile[21:24] == b'CLR':

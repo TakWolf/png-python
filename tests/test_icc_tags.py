@@ -100,7 +100,8 @@ def test_icc_v4_profile_class_required_tags(v4_profile: bytes, profile_class: by
                                           remove: bytes, missing: str) -> None:
     tags = _tags(v4_profile)
     del tags[remove]
-    profile = _rebuild(v4_profile, tags, profile_class=profile_class)
+    profile = _rebuild(v4_profile, tags, profile_class=profile_class,
+                       color_space=b'XYZ ' if profile_class == b'abst' else b'RGB ')
     with pytest.raises(PngValidationError, match=missing):
         PngIccProfile('Incomplete class', profile).validate_profile_tags()
 

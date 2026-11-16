@@ -3,10 +3,16 @@
 from hashlib import md5
 from struct import unpack_from
 
+from png._icc_lut import _channels
 from png.error import PngValidationError
 
 
 def validate_header_fields(profile: bytes) -> None:
+    _channels(profile[16:20])
+    if profile[12:16] == b'link':
+        _channels(profile[20:24])
+    if profile[12:16] == b'abst' and profile[16:20] not in (b'XYZ ', b'Lab '):
+        raise PngValidationError('ICC Abstract profiles transform PCS to PCS')
     minor = profile[9]
     if (minor >> 4) > 9 or (minor & 15) > 9 or any(profile[10:12]):
         raise PngValidationError('ICC version requires BCD digits and zero reserved bytes')

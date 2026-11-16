@@ -96,3 +96,48 @@ def test_nclr_conditional_colorant_tables(assets_dir, category, missing):
     rebuilt = _rebuild(rebuilt, tags)
     with pytest.raises(PngValidationError, match=missing.decode()):
         PngIccProfile('Missing colorants', rebuilt).validate_profile_tags()
+
+
+@pytest.mark.parametrize('state', [b'scoe', b'sape', b'fpce', b'rhoc', b'rpoc'])
+def test_colorimetric_image_state_requires_viewing_conditions(assets_dir, state):
+    profile = assets_dir.joinpath('icc', 'sRGB_v4_ICC_preference.icc').read_bytes()
+    tags = _tags(profile)
+    tags.pop(b'chad', None)
+    tags[b'ciis'] = _payload(b'sig ', state)
+    with pytest.raises(PngValidationError, match='view'):
+        PngIccProfile('Image state', _rebuild(profile, tags)).validate_profile_tags()
+    tags[b'view'] = _payload(b'view', bytes(28))
+    if state in (b'rhoc', b'rpoc'):
+        with pytest.raises(PngValidationError, match='chad'):
+            PngIccProfile('Missing adaptation', _rebuild(profile, tags)).validate_profile_tags()
+        tags[b'chad'] = _payload(b'sf32', pack('>9i', 65536, 0, 0, 0, 65536, 0, 0, 0, 65536))
+    PngIccProfile('Image state', _rebuild(profile, tags)).validate_profile_tags()
+
+
+def test_reserved_colorimetric_image_state_is_rejected(assets_dir):
+    profile = assets_dir.joinpath('icc', 'sRGB_v4_ICC_preference.icc').read_bytes()
+    tags = _tags(profile)
+    tags[b'ciis'] = _payload(b'sig ', b'none')
+    with pytest.raises(PngValidationError, match='reserved'):
+        PngIccProfile('Reserved state', _rebuild(profile, tags)).validate_profile_tags()
+
+
+def test_display_white_and_abstract_space_requirements(icc_profile_bytes):
+    from png._icc_header import validate_header_fields
+    header = bytearray(icc_profile_bytes)
+    header[84:100] = bytes(16)
+    header[12:20] = b'abstRGB '
+    with pytest.raises(PngValidationError, match='PCS to PCS'):
+        validate_header_fields(bytes(header))
+
+    header[12:20] = b'mntrBAD!'
+    with pytest.raises(PngValidationError, match='colour space'):
+        validate_header_fields(bytes(header))
+
+
+def test_v4_display_media_white_is_the_pcs_illuminant(assets_dir):
+    profile = assets_dir.joinpath('icc', 'sRGB_v4_ICC_preference.icc').read_bytes()
+    tags = _tags(profile)
+    tags[b'wtpt'] = _payload(b'XYZ ', pack('>3i', 60000, 65536, 70000))
+    with pytest.raises(PngValidationError, match='media white'):
+        PngIccProfile('Display white', _rebuild(profile, tags, profile_class=b'mntr')).validate_profile_tags()
