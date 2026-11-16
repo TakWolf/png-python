@@ -426,6 +426,11 @@ class PngExif(PngMetadata):
         """Check TIFF directory/value bounds without interpreting all Exif tags."""
         validate_exif_structure(self.profile)
 
+    def validate_profile_tags(self) -> None:
+        """Check storage and selected present Exif fields, without rewriting history."""
+        self.validate()
+        validate_exif_structure(self.profile, check_fields=True)
+
     @staticmethod
     def from_chunk(chunk: PngChunk) -> PngExif:
         result = PngExif(_data(chunk, b'eXIf'))
@@ -623,7 +628,7 @@ def validate_metadata_chunks(
                     validate_png_embedding(metadata.profile)
                     metadata.validate_profile_tags()
                 elif isinstance(metadata, PngExif):
-                    metadata.validate_profile_structure()
+                    metadata.validate_profile_tags()
                 elif isinstance(metadata, PngCicp):
                     metadata.validate_code_points()
             if chunk.type in parsed and chunk.type not in repeated:
