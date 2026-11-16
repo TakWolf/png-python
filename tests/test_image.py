@@ -12,6 +12,8 @@ from png import (
     PngColorType,
     PngDocument,
     PngFilterType,
+    PngFrame,
+    PngFrameControl,
     PngHeader,
     PngImage,
     PngInterlaceMethod,
@@ -289,3 +291,60 @@ def test_failed_image_save_does_not_truncate(tmp_path: Path) -> None:
     with pytest.raises(PngValidationError):
         image.save(path)
     assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    ('kind', 'scanlines'),
+    [
+        (PngFilterType.NONE, bytes([0, 10, 20, 30, 0, 30, 20, 10])),
+        (PngFilterType.SUB, bytes([1, 10, 10, 10, 1, 30, 246, 246])),
+        (PngFilterType.UP, bytes([2, 10, 20, 30, 2, 20, 0, 236])),
+        (PngFilterType.AVERAGE, bytes([3, 10, 15, 20, 3, 25, 251, 241])),
+        (PngFilterType.PAETH, bytes([4, 10, 10, 10, 4, 20, 246, 236])),
+    ],
+)
+def test_fixed_filter_scanlines(kind: PngFilterType, scanlines: bytes) -> None:
+    header = PngHeader((3, 2), color_type=PngColorType.GRAYSCALE)
+    document = PngDocument(
+        [
+            header.to_chunk(),
+            PngChunk(b'IDAT', zlib.compress(scanlines)),
+            PngChunk(b'IEND'),
+        ]
+    )
+    image = PngImage.from_document(document)
+    assert image.bitmap == [[10, 20, 30], [30, 20, 10]]
+    encoded = image.to_document(filter_type=kind)
+    assert zlib.decompress(b''.join(chunk.data for chunk in encoded.find_chunks(b'IDAT'))) == scanlines
+
+
+@pytest.mark.parametrize('sample', [True, 1.0, -1, 256])
+@pytest.mark.parametrize('in_frame', [False, True])
+def test_loaded_samples_are_revalidated_after_editing(sample, in_frame: bool, tmp_path: Path) -> None:
+    image = PngImage(
+        PngHeader((1, 1)),
+        [[10, 20, 30, 255]],
+        animation=PngAnimation(frames=[PngFrame(PngFrameControl((1, 1)), [[40, 50, 60, 128]])]),
+    )
+    loaded = PngImage.parse(image.dump_to_bytes())
+    bitmap = loaded.animation.frames[0].bitmap if in_frame else loaded.bitmap
+    bitmap[0][0] = sample
+    with pytest.raises(PngValidationError, match='pixel sample'):
+        loaded.validate()
+    stream = BytesIO(b'preserved')
+    with pytest.raises(PngValidationError, match='pixel sample'):
+        loaded.dump(stream)
+    assert stream.getvalue() == b'preserved'
+    destination = tmp_path.joinpath('preserved.png')
+    destination.write_bytes(b'preserved')
+    with pytest.raises(PngValidationError, match='pixel sample'):
+        loaded.save(destination)
+    assert destination.read_bytes() == b'preserved'
+
+
+def test_from_document_revalidates_previously_loaded_document(png_suite_dir: Path) -> None:
+    document = PngDocument.load(png_suite_dir.joinpath('basn6a08.png'))
+    PngImage.from_document(document)
+    document.chunks.insert(-1, document.chunks[0])
+    with pytest.raises(PngValidationError, match='duplicate'):
+        PngImage.from_document(document)

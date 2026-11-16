@@ -55,39 +55,46 @@ def _paeth(left: int, above: int, upper_left: int) -> int:
     return upper_left
 
 
-def _predict(kind: int, left: int, above: int, upper_left: int) -> int:
-    if kind == PngFilterType.SUB:
-        return left
-    if kind == PngFilterType.UP:
-        return above
-    if kind == PngFilterType.AVERAGE:
-        return (left + above) // 2
-    return _paeth(left, above, upper_left)
-
-
 def _unfilter(kind: int, data: bytes, previous: bytes, stride: int) -> bytes:
-    if kind not in (0, 1, 2, 3, 4):
-        raise PngParseError(f'unsupported scanline filter type: {kind}')
-    if kind == PngFilterType.NONE:
+    if kind == 0:
         return data
     row = bytearray(data)
-    for index, value in enumerate(row):
-        left = row[index - stride] if index >= stride else 0
-        above = previous[index]
-        upper_left = previous[index - stride] if index >= stride else 0
-        row[index] = (value + _predict(kind, left, above, upper_left)) & 255
+    if kind == 1:
+        for index in range(stride, len(row)):
+            row[index] = (row[index] + row[index - stride]) & 255
+    elif kind == 2:
+        row = bytearray((value + above) & 255 for value, above in zip(row, previous, strict=True))
+    elif kind == 3:
+        for index, value in enumerate(row):
+            left = row[index - stride] if index >= stride else 0
+            row[index] = (value + ((left + previous[index]) // 2)) & 255
+    elif kind == 4:
+        for index, value in enumerate(row):
+            left = row[index - stride] if index >= stride else 0
+            upper_left = previous[index - stride] if index >= stride else 0
+            row[index] = (value + _paeth(left, previous[index], upper_left)) & 255
+    else:
+        raise PngParseError(f'unsupported scanline filter type: {kind}')
     return bytes(row)
 
 
 def _filter(kind: int, row: bytes, previous: bytes, stride: int) -> bytes:
-    if kind == PngFilterType.NONE:
+    if kind == 0:
         return row
+    if kind == 1:
+        return row[:stride] + bytes((row[index] - row[index - stride]) & 255 for index in range(stride, len(row)))
+    if kind == 2:
+        return bytes((value - above) & 255 for value, above in zip(row, previous, strict=True))
     filtered = bytearray(len(row))
-    for index, value in enumerate(row):
-        left = row[index - stride] if index >= stride else 0
-        above = previous[index]
-        upper_left = previous[index - stride] if index >= stride else 0
-        filtered[index] = (value - _predict(kind, left, above, upper_left)) & 255
+    if kind == 3:
+        for index, value in enumerate(row):
+            left = row[index - stride] if index >= stride else 0
+            filtered[index] = (value - ((left + previous[index]) // 2)) & 255
+    else:
+        for index, value in enumerate(row):
+            left = row[index - stride] if index >= stride else 0
+            upper_left = previous[index - stride] if index >= stride else 0
+            filtered[index] = (value - _paeth(left, previous[index], upper_left)) & 255
     return bytes(filtered)
 
 
@@ -119,7 +126,11 @@ def decode_pixels(header: PngHeader, blocks: Iterable[bytes]) -> list[list[int]]
     expected_size = sum(((width * header.bits_per_pixel + 7) // 8 + 1) * height for _, _, _, _, width, height in passes)
     # Validate the decompressed extent before allocating the bitmap from IHDR.
     data = _inflate(blocks, expected_size)
-    bitmap = [[0] * (header.width * channels) for _ in range(header.height)]
+    bitmap = (
+        []
+        if header.interlace_method == PngInterlaceMethod.NONE
+        else [[0] * (header.width * channels) for _ in range(header.height)]
+    )
     stride = max(1, (header.bits_per_pixel + 7) // 8)
     offset = 0
     for x, y, dx, dy, width, height in passes:
@@ -130,6 +141,9 @@ def decode_pixels(header: PngHeader, blocks: Iterable[bytes]) -> list[list[int]]
             offset += row_size + 1
             previous = row
             samples = _unpack_samples(row, header.bit_depth, width * channels)
+            if header.interlace_method == PngInterlaceMethod.NONE:
+                bitmap.append(samples)
+                continue
             target = bitmap[y + row_index * dy]
             for index in range(width):
                 start = (x + index * dx) * channels
@@ -154,11 +168,15 @@ def encode_pixels(
         previous = bytes((width * header.bits_per_pixel + 7) // 8)
         for row_index in range(height):
             source = bitmap[y + row_index * dy]
-            samples = [
-                sample
-                for index in range(width)
-                for sample in source[(x + index * dx) * channels : (x + index * dx + 1) * channels]
-            ]
+            samples = (
+                source
+                if x == 0 and dx == 1
+                else [
+                    sample
+                    for index in range(width)
+                    for sample in source[(x + index * dx) * channels : (x + index * dx + 1) * channels]
+                ]
+            )
             row = _pack_samples(samples, header.bit_depth)
             kind = filter_type
             if kind is None and (header.bit_depth < 8 or header.color_type == PngColorType.INDEXED_COLOR):
@@ -166,7 +184,8 @@ def encode_pixels(
             if kind is None:
                 candidates = [(option, _filter(option, row, previous, stride)) for option in PngFilterType]
                 kind, filtered = min(
-                    candidates, key=lambda candidate: sum(min(value, 256 - value) for value in candidate[1])
+                    candidates,
+                    key=lambda candidate: sum(value if value < 128 else 256 - value for value in candidate[1]),
                 )
             else:
                 filtered = _filter(kind, row, previous, stride)

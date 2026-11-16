@@ -118,6 +118,12 @@ class PngImage:
     def from_document(document: PngDocument, *, limits: PngReadLimits | None = None) -> PngImage:
         """Decode an independent image, preserving original sample depth."""
         document.validate(limits=limits)
+        return PngImage._from_validated_document(document, limits=limits)
+
+    @staticmethod
+    def _from_validated_document(document: PngDocument, *, limits: PngReadLimits | None = None) -> PngImage:
+        # Operation-local shortcut: callers must have just validated the document.
+        # Never cache validation on these mutable models.
         header = PngHeader.from_chunk(document.chunks[0])
         image = PngImage(header, decode_pixels(header, (chunk.data for chunk in document.find_chunks(b'IDAT'))))
         animation = scan_animation(document.chunks, header)
@@ -170,14 +176,16 @@ class PngImage:
                     image.palette_alpha.extend([255] * (len(image.palette) - len(image.palette_alpha)))
                 if image.find_metadata(b'hIST'):
                     image.recalculate_histogram()
-        image.validate()
+        # The decoder guarantees sample types, extents and bit-depth bounds.
+        # Palette repair above guarantees index bounds; retain metadata and hIST checks.
+        image._validate(check_pixels=False)
         return image
 
     @staticmethod
     def parse(stream: bytes | BinaryIO, *, limits: PngReadLimits | None = None) -> PngImage:
         ReadBudget(limits)  # Invalid application policy is not corrupt PNG input.
         try:
-            return PngImage.from_document(PngDocument.parse(stream, limits=limits), limits=limits)
+            return PngImage._from_validated_document(PngDocument.parse(stream, limits=limits), limits=limits)
         except PngValidationError as error:
             raise PngParseError(str(error)) from error
 
@@ -186,7 +194,7 @@ class PngImage:
         """Read a whole PNG file, checking its boundary before decoding pixels."""
         document = PngDocument.load(file_path, limits=limits)
         try:
-            return PngImage.from_document(document, limits=limits)
+            return PngImage._from_validated_document(document, limits=limits)
         except PngValidationError as error:
             raise PngParseError(str(error)) from error
 
@@ -380,6 +388,9 @@ class PngImage:
         Construction and field mutation allow incomplete intermediate state.
         Chunk ordering, metadata semantics and compressed data are not checked.
         """
+        self._validate(check_pixels=True)
+
+    def _validate(self, *, check_pixels: bool) -> None:
         self.header.validate()
         for chunk in self.ancillary_chunks:
             chunk.validate()
@@ -413,11 +424,13 @@ class PngImage:
                 check_integer('palette alpha', alpha, 0, 255)
         metadata_chunks = [item.to_chunk() for item in self.metadata] + self.ancillary_chunks
         validate_metadata_chunks(metadata_chunks, self.header, len(self.palette), for_encoding=True)
-        self._validate_bitmap(self.bitmap, self.dimensions)
+        if check_pixels:
+            self._validate_bitmap(self.bitmap, self.dimensions)
         if self.animation is not None:
             self.animation.validate(self.dimensions)
-            for frame in self.animation.frames:
-                self._validate_bitmap(frame.bitmap, frame.control.dimensions)
+            if check_pixels:
+                for frame in self.animation.frames:
+                    self._validate_bitmap(frame.bitmap, frame.control.dimensions)
         if self.header.color_type == PngColorType.INDEXED_COLOR:
             histograms = [PngHistogram.from_chunk(chunk) for chunk in metadata_chunks if chunk.type == b'hIST']
             if histograms:
@@ -440,4 +453,5 @@ class PngImage:
             if len(row) != samples_per_row:
                 raise PngValidationError(f'expected {samples_per_row} samples per row, got {len(row)}')
             for sample in row:
-                check_integer('pixel sample', sample, 0, max_sample)
+                if type(sample) is not int or not 0 <= sample <= max_sample:
+                    check_integer('pixel sample', sample, 0, max_sample)
