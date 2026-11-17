@@ -47,16 +47,9 @@ def _inflate(blocks: Iterable[bytes], expected_size: int) -> bytes:
     return bytes(data)
 
 
-def _paeth(left: int, above: int, upper_left: int) -> int:
-    prediction = left + above - upper_left
-    a, b, c = abs(prediction - left), abs(prediction - above), abs(prediction - upper_left)
-    if a <= b and a <= c:
-        return left
-    if b <= c:
-        return above
-    return upper_left
-
-
+# Keep Paeth prediction inline in the three byte loops below. The distances
+# |p-left|, |p-above|, |p-upper_left| reduce to |above-upper_left|,
+# |left-upper_left|, |above+left-2*upper_left|, with left-first tie breaking.
 def _unfilter(kind: int, data: bytes, previous: bytes, stride: int) -> bytes:
     if kind == 0:
         return data
@@ -71,10 +64,15 @@ def _unfilter(kind: int, data: bytes, previous: bytes, stride: int) -> bytes:
             left = row[index - stride] if index >= stride else 0
             row[index] = (value + ((left + previous[index]) // 2)) & 255
     elif kind == 4:
-        for index, value in enumerate(row):
-            left = row[index - stride] if index >= stride else 0
-            upper_left = previous[index - stride] if index >= stride else 0
-            row[index] = (value + _paeth(left, previous[index], upper_left)) & 255
+        # With no left/upper-left byte, Paeth is the Up predictor.
+        for index in range(min(stride, len(row))):
+            row[index] = (row[index] + previous[index]) & 255
+        for index in range(stride, len(row)):
+            left, above, upper_left = row[index - stride], previous[index], previous[index - stride]
+            horizontal, vertical = above - upper_left, left - upper_left
+            a, b, c = abs(horizontal), abs(vertical), abs(horizontal + vertical)
+            predictor = left if a <= b and a <= c else above if b <= c else upper_left
+            row[index] = (row[index] + predictor) & 255
     else:
         raise PngParseError(f'unsupported scanline filter type: {kind}')
     return bytes(row)
@@ -93,10 +91,14 @@ def _filter(kind: int, row: bytes, previous: bytes, stride: int) -> bytes:
             left = row[index - stride] if index >= stride else 0
             filtered[index] = (value - ((left + previous[index]) // 2)) & 255
     else:
-        for index, value in enumerate(row):
-            left = row[index - stride] if index >= stride else 0
-            upper_left = previous[index - stride] if index >= stride else 0
-            filtered[index] = (value - _paeth(left, previous[index], upper_left)) & 255
+        for index in range(min(stride, len(row))):
+            filtered[index] = (row[index] - previous[index]) & 255
+        for index in range(stride, len(row)):
+            left, above, upper_left = row[index - stride], previous[index], previous[index - stride]
+            horizontal, vertical = above - upper_left, left - upper_left
+            a, b, c = abs(horizontal), abs(vertical), abs(horizontal + vertical)
+            predictor = left if a <= b and a <= c else above if b <= c else upper_left
+            filtered[index] = (row[index] - predictor) & 255
     return bytes(filtered)
 
 
@@ -126,10 +128,17 @@ def _filter_and_score(kind: int, row: bytes, previous: bytes, stride: int, trial
             if score > minimum:
                 return score
     else:
-        for index, sample in enumerate(row):
-            left = row[index - stride] if index >= stride else 0
-            upper_left = previous[index - stride] if index >= stride else 0
-            value = trial[index] = (sample - _paeth(left, previous[index], upper_left)) & 255
+        for index in range(min(stride, len(row))):
+            value = trial[index] = (row[index] - previous[index]) & 255
+            score += costs[value]
+            if score > minimum:
+                return score
+        for index in range(stride, len(row)):
+            left, above, upper_left = row[index - stride], previous[index], previous[index - stride]
+            horizontal, vertical = above - upper_left, left - upper_left
+            a, b, c = abs(horizontal), abs(vertical), abs(horizontal + vertical)
+            predictor = left if a <= b and a <= c else above if b <= c else upper_left
+            value = trial[index] = (row[index] - predictor) & 255
             score += costs[value]
             if score > minimum:
                 return score
