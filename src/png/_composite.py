@@ -16,29 +16,45 @@ if TYPE_CHECKING:
 def _rgba_rows(image: 'PngImage', bitmap: list[list[int]], depth: int) -> list[list[int]]:
     maximum = (1 << depth) - 1
     source_maximum = (1 << image.header.bit_depth) - 1
-    channels = image.header.channels
+    kind = image.header.color_type
+    transparent = image.transparent_color
+    if kind == PngColorType.TRUECOLOR_ALPHA:
+        return [list(row) for row in bitmap]
     result = []
-    for row in bitmap:
-        output = []
-        for index in range(0, len(row), channels):
-            samples = tuple(row[index : index + channels])
-            kind = image.header.color_type
-            if kind == PngColorType.INDEXED_COLOR:
-                palette_index = samples[0]
-                red, green, blue = image.palette[palette_index]
-                alpha = image.palette_alpha[palette_index] if palette_index < len(image.palette_alpha) else 255
-            elif kind in (PngColorType.GRAYSCALE, PngColorType.GRAYSCALE_ALPHA):
-                red = green = blue = samples[0] * maximum // source_maximum
-                alpha = samples[1] if kind == PngColorType.GRAYSCALE_ALPHA else maximum
-                if kind == PngColorType.GRAYSCALE and samples == image.transparent_color:
-                    alpha = 0
-            else:
-                red, green, blue = samples[:3]
-                alpha = samples[3] if kind == PngColorType.TRUECOLOR_ALPHA else maximum
-                if kind == PngColorType.TRUECOLOR and samples == image.transparent_color:
-                    alpha = 0
-            output.extend((red, green, blue, alpha))
-        result.append(output)
+    if kind == PngColorType.INDEXED_COLOR:
+        palette = image.palette
+        alpha = image.palette_alpha
+        # Build the table once, including implicit opaque palette entries.
+        colors = [(*color, alpha[i] if i < len(alpha) else 255) for i, color in enumerate(palette)]
+        for row in bitmap:
+            result.append([sample for index in row for sample in colors[index]])
+    elif kind in (PngColorType.GRAYSCALE, PngColorType.GRAYSCALE_ALPHA):
+        has_alpha = kind == PngColorType.GRAYSCALE_ALPHA
+        for row in bitmap:
+            gray = row[0::2] if has_alpha else row
+            if maximum != source_maximum:
+                gray = [sample * maximum // source_maximum for sample in gray]
+            output = [maximum] * (len(gray) * 4)
+            for channel in range(3):
+                output[channel::4] = gray
+            if has_alpha:
+                output[3::4] = row[1::2]
+            elif transparent is not None:
+                # Match in source precision, before low-depth expansion.
+                output[3::4] = [0 if sample == transparent[0] else maximum for sample in row]
+            result.append(output)
+    else:
+        for row in bitmap:
+            output = [maximum] * (len(row) // 3 * 4)
+            for channel in range(3):
+                output[channel::4] = row[channel::3]
+            if transparent is not None:
+                red, green, blue = transparent
+                output[3::4] = [
+                    0 if row[i] == red and row[i + 1] == green and row[i + 2] == blue else maximum
+                    for i in range(0, len(row), 3)
+                ]
+            result.append(output)
     return result
 
 
