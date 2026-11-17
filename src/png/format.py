@@ -31,6 +31,17 @@ class PngCompressionMethod(IntEnum):
 
 
 @unique
+class PngCompressionStrategy(IntEnum):
+    """Pixel encoder tuning; independent of the PNG compression method."""
+
+    DEFAULT = 0
+    FILTERED = 1
+    HUFFMAN_ONLY = 2
+    RLE = 3
+    FIXED = 4
+
+
+@unique
 class PngFilterMethod(IntEnum):
     ADAPTIVE = 0
 

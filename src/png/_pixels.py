@@ -6,7 +6,7 @@ from struct import iter_unpack, pack
 
 from png._validation import check_integer
 from png.error import PngParseError
-from png.format import PngColorType, PngFilterType, PngInterlaceMethod
+from png.format import PngColorType, PngCompressionStrategy, PngFilterType, PngInterlaceMethod
 from png.header import PngHeader
 
 _FILTER_COST = bytes(value if value < 128 else 256 - value for value in range(256))
@@ -203,14 +203,16 @@ def encode_pixels(
     bitmap: list[list[int]],
     filter_type: PngFilterType | None,
     compression_level: int,
+    compression_strategy: PngCompressionStrategy = PngCompressionStrategy.DEFAULT,
 ) -> bytes:
     check_integer('compression level', compression_level, -1, 9)
+    check_integer('compression strategy', compression_strategy, 0, 4)
     if filter_type is not None:
         check_integer('filter type', filter_type, 0, 4)
     adaptive = filter_type is None and header.bit_depth >= 8 and header.color_type != PngColorType.INDEXED_COLOR
     if filter_type is None and not adaptive:
         filter_type = PngFilterType.NONE
-    compressor = zlib.compressobj(compression_level)
+    compressor = zlib.compressobj(compression_level, strategy=compression_strategy)
     data = bytearray()
     channels = header.channels
     stride = max(1, (header.bits_per_pixel + 7) // 8)

@@ -318,7 +318,7 @@ physical pixel dimensions do not resample the stored canvas coordinates.
 ### Choose interlacing, filtering, and compression
 
 ```python
-from png import PngFilterType, PngImage, PngInterlaceMethod
+from png import PngCompressionStrategy, PngFilterType, PngImage, PngInterlaceMethod
 
 image = PngImage.load('created.png')
 image.header.interlace_method = PngInterlaceMethod.ADAM7
@@ -326,14 +326,24 @@ image.save(
     'interlaced.png',
     filter_type=PngFilterType.PAETH,
     compression_level=9,
+    compression_strategy=PngCompressionStrategy.FILTERED,
     idat_chunk_size=32 * 1024,
 )
 ```
 
-The default `filter_type=None` selects filters adaptively for each scanline.
+The default `filter_type=None` selects filters adaptively for 8/16-bit direct-color
+images; indexed and low-bit-depth images use `PngFilterType.NONE`.
 Compression levels range from 0 to 9; they change encoding size and cost without
 changing pixel values. `idat_chunk_size` controls how compressed data is split
-into IDAT/fdAT chunks. The same options work with `dump()` and `dump_to_bytes()`.
+into IDAT/fdAT chunks. The same options work with `to_document()`, `dump()`, and
+`dump_to_bytes()`.
+
+`compression_strategy` defaults to `PngCompressionStrategy.DEFAULT`. Other
+choices are `FILTERED`, `HUFFMAN_ONLY`, `RLE`, and `FIXED`; they tune compression
+of the default image and every APNG frame without changing pixel values. Try
+`FILTERED` for filtered image data or `RLE` for runs of repeated bytes, and
+compare file size and encoding time for your images. This option is independent
+of `filter_type` and does not change compression of text or ICC metadata.
 
 ### Inspect or edit raw chunks
 

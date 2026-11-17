@@ -15,7 +15,7 @@ from png.animation import PngAnimation, PngFrame, PngRenderedFrame
 from png.chunk import PngChunk
 from png.document import PngDocument
 from png.error import PngParseError, PngValidationError
-from png.format import PngColorType, PngFilterType, PngInterlaceMethod
+from png.format import PngColorType, PngCompressionStrategy, PngFilterType, PngInterlaceMethod
 from png.header import PngHeader
 from png.limits import PngReadLimits
 from png.metadata import (
@@ -203,11 +203,18 @@ class PngImage:
         *,
         filter_type: PngFilterType | None = None,
         compression_level: int = 6,
+        compression_strategy: PngCompressionStrategy = PngCompressionStrategy.DEFAULT,
         idat_chunk_size: int = 65536,
     ) -> PngDocument:
-        """Encode an image. None selects adaptive scanline filtering."""
+        """Encode an image with automatic filter selection when filter_type is None.
+
+        Compression strategy applies to IDAT/fdAT pixels only.
+        """
         document = self._encode_document(
-            filter_type=filter_type, compression_level=compression_level, idat_chunk_size=idat_chunk_size
+            filter_type=filter_type,
+            compression_level=compression_level,
+            compression_strategy=compression_strategy,
+            idat_chunk_size=idat_chunk_size,
         )
         document.validate()
         return document
@@ -217,6 +224,7 @@ class PngImage:
         *,
         filter_type: PngFilterType | None,
         compression_level: int,
+        compression_strategy: PngCompressionStrategy,
         idat_chunk_size: int,
     ) -> PngDocument:
         # Build an operation-local document. Each caller then applies either
@@ -224,7 +232,7 @@ class PngImage:
         # Publicly returned documents remain mutable and are rechecked on output.
         self.validate()
         check_integer('IDAT chunk size', idat_chunk_size, 1, 0x7FFFFFFF)
-        encoded = encode_pixels(self.header, self.bitmap, filter_type, compression_level)
+        encoded = encode_pixels(self.header, self.bitmap, filter_type, compression_level, compression_strategy)
         before, after = [], []
         entries = [(item, item.to_chunk()) for item in self.metadata] + [
             (chunk, chunk) for chunk in self.ancillary_chunks
@@ -269,7 +277,11 @@ class PngImage:
                 chunks.append(frame.control.to_chunk(sequence))
                 sequence += 1
                 payload = encode_pixels(
-                    frame_header(self.header, frame.control.dimensions), frame.bitmap, filter_type, compression_level
+                    frame_header(self.header, frame.control.dimensions),
+                    frame.bitmap,
+                    filter_type,
+                    compression_level,
+                    compression_strategy,
                 )
                 frame_chunk_size = min(idat_chunk_size, 0x7FFFFFFF - 4)
                 for offset in range(0, len(payload), frame_chunk_size):
@@ -390,10 +402,14 @@ class PngImage:
         *,
         filter_type: PngFilterType | None = None,
         compression_level: int = 6,
+        compression_strategy: PngCompressionStrategy = PngCompressionStrategy.DEFAULT,
         idat_chunk_size: int = 65536,
     ) -> None:
         self._encode_document(
-            filter_type=filter_type, compression_level=compression_level, idat_chunk_size=idat_chunk_size
+            filter_type=filter_type,
+            compression_level=compression_level,
+            compression_strategy=compression_strategy,
+            idat_chunk_size=idat_chunk_size,
         ).dump(stream)
 
     def dump_to_bytes(
@@ -401,10 +417,17 @@ class PngImage:
         *,
         filter_type: PngFilterType | None = None,
         compression_level: int = 6,
+        compression_strategy: PngCompressionStrategy = PngCompressionStrategy.DEFAULT,
         idat_chunk_size: int = 65536,
     ) -> bytes:
         stream = BytesIO()
-        self.dump(stream, filter_type=filter_type, compression_level=compression_level, idat_chunk_size=idat_chunk_size)
+        self.dump(
+            stream,
+            filter_type=filter_type,
+            compression_level=compression_level,
+            compression_strategy=compression_strategy,
+            idat_chunk_size=idat_chunk_size,
+        )
         return stream.getvalue()
 
     def save(
@@ -413,10 +436,14 @@ class PngImage:
         *,
         filter_type: PngFilterType | None = None,
         compression_level: int = 6,
+        compression_strategy: PngCompressionStrategy = PngCompressionStrategy.DEFAULT,
         idat_chunk_size: int = 65536,
     ) -> None:
         self._encode_document(
-            filter_type=filter_type, compression_level=compression_level, idat_chunk_size=idat_chunk_size
+            filter_type=filter_type,
+            compression_level=compression_level,
+            compression_strategy=compression_strategy,
+            idat_chunk_size=idat_chunk_size,
         ).save(file_path)
 
     @property
