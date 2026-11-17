@@ -75,6 +75,32 @@ samples. Changing the header's dimensions or color type also requires updating
 the bitmap and any dependent palette, transparency, or animation data. Saving
 validates the current model and re-encodes its samples.
 
+### Convert to RGBA
+
+`to_rgba()` returns an independent static RGBA copy of the default image:
+
+```python
+from png import PngImage
+
+image = PngImage.load('created.png')
+rgba = image.to_rgba()  # Preserve 16-bit samples; expand other inputs to RGBA8
+rgba.save('rgba.png')
+
+rgba8 = image.to_rgba(bit_depth=8)  # Explicitly scale 16-bit samples to 8 bits
+rgba16 = image.to_rgba(bit_depth=16)
+```
+
+Palette entries and tRNS become alpha samples. Transparency is matched at the
+original precision before scaling; explicit bit-depth changes use integer
+rounding on straight color and alpha samples. The source image is unchanged.
+
+The result copies applicable color descriptions and pHYs independently; it omits
+other metadata, including palette-dependent records. Grayscale ICC profiles are
+omitted because they cannot describe RGB samples. No color-space transform or
+tone mapping is performed. For APNG, this converts the default image (which may
+be a separate poster) and omits animation; use `render_frames()` for composited
+animation snapshots.
+
 ### Work with bytes and streams
 
 The same interfaces are available on `PngImage` and `PngDocument`:

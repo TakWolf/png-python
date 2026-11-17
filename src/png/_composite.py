@@ -58,30 +58,33 @@ def _rgba_rows(image: 'PngImage', bitmap: list[list[int]], depth: int) -> list[l
     return result
 
 
-def render_frames(image: 'PngImage') -> Iterator[PngRenderedFrame]:
+def _rgba_image(image: 'PngImage', bitmap: list[list[int]], depth: int) -> 'PngImage':
+    """Build a static snapshot with independently copied, applicable metadata."""
     from png.image import PngImage
 
-    depth = 16 if image.header.bit_depth == 16 else 8
-    maximum = (1 << depth) - 1
-    width, height = image.dimensions
     metadata_types = COLOR_METADATA_TYPES | {b'pHYs'}
     if image.header.color_type in (PngColorType.GRAYSCALE, PngColorType.GRAYSCALE_ALPHA):
         # An ICC profile for gray samples cannot describe an RGB(A) snapshot.
         # Profile conversion belongs to the separate color-management layer.
         metadata_types = metadata_types - {b'iCCP'}
 
-    def snapshot(bitmap: list[list[int]]) -> PngImage:
-        return PngImage(
-            PngHeader(image.dimensions, depth),
-            bitmap,
-            ancillary_chunks=[
-                PngChunk(chunk.type, chunk.data) for chunk in image.ancillary_chunks if chunk.type in metadata_types
-            ],
-            metadata=[deepcopy(item) for item in image.metadata if item.type in metadata_types],
-        )
+    return PngImage(
+        PngHeader(image.dimensions, depth),
+        bitmap,
+        ancillary_chunks=[
+            PngChunk(chunk.type, chunk.data) for chunk in image.ancillary_chunks if chunk.type in metadata_types
+        ],
+        metadata=[deepcopy(item) for item in image.metadata if item.type in metadata_types],
+    )
+
+
+def render_frames(image: 'PngImage') -> Iterator[PngRenderedFrame]:
+    depth = 16 if image.header.bit_depth == 16 else 8
+    maximum = (1 << depth) - 1
+    width, height = image.dimensions
 
     if image.animation is None:
-        yield PngRenderedFrame(snapshot(_rgba_rows(image, image.bitmap, depth)), Fraction(0))
+        yield PngRenderedFrame(_rgba_image(image, _rgba_rows(image, image.bitmap, depth), depth), Fraction(0))
         return
     frames = [(frame.control, frame.bitmap) for frame in image.animation.frames]
     if image.animation.default_image_control is not None:
@@ -112,7 +115,7 @@ def render_frames(image: 'PngImage') -> Iterator[PngRenderedFrame]:
                         )
                         target[position + channel] = (numerator + alpha_numerator // 2) // alpha_numerator
                     target[position + 3] = (alpha_numerator + maximum // 2) // maximum
-        yield PngRenderedFrame(snapshot([row.copy() for row in canvas]), control.delay)
+        yield PngRenderedFrame(_rgba_image(image, [row.copy() for row in canvas], depth), control.delay)
         for row_index in range(control.height):
             target = canvas[control.offset_y + row_index]
             if disposal == PngDisposeOp.BACKGROUND:

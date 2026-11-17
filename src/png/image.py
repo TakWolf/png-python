@@ -280,6 +280,33 @@ class PngImage:
         chunks.append(PngChunk(b'IEND'))
         return PngDocument(chunks)
 
+    def to_rgba(self, *, bit_depth: int | None = None) -> PngImage:
+        """Return an independent static RGBA copy of the default image.
+
+        By default 16-bit samples retain their depth; other inputs become RGBA8.
+        Explicit 8/16-bit conversion scales all channels with integer rounding,
+        after matching transparency in the original precision. Only applicable
+        color descriptions and pHYs are copied, independently, as for render_frames.
+        This does not composite animation frames or perform color management.
+        """
+        from png._composite import _rgba_image, _rgba_rows
+
+        if bit_depth is not None:
+            check_integer('RGBA bit depth', bit_depth, 8, 16)
+            if bit_depth not in (8, 16):
+                raise PngValidationError('RGBA bit depth must be 8 or 16')
+        self.validate()
+        source_depth = 16 if self.header.bit_depth == 16 else 8
+        target_depth = source_depth if bit_depth is None else bit_depth
+        rows = _rgba_rows(self, self.bitmap, source_depth)
+        if target_depth != source_depth:
+            source_maximum = (1 << source_depth) - 1
+            target_maximum = (1 << target_depth) - 1
+            rows = [
+                [(sample * target_maximum + source_maximum // 2) // source_maximum for sample in row] for row in rows
+            ]
+        return _rgba_image(self, rows, target_depth)
+
     def render_frames(self) -> Iterator[PngRenderedFrame]:
         """Yield independent RGBA canvas snapshots for one animation play.
 
