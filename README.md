@@ -490,8 +490,8 @@ Tests use the original [PngSuite](assets/png-suite/SOURCE.md) images and pinned
 
 ```shell
 uv sync
-uv run -m ruff check
-uv run -m ruff format --check
+uv run -m ruff check --fix
+uv run -m ruff format
 uv run -m pytest
 ```
 
