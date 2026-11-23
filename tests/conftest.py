@@ -6,7 +6,7 @@ import pytest
 
 _PROJECT_ROOT_DIR = Path(__file__).parents[1]
 _ASSETS_DIR = _PROJECT_ROOT_DIR.joinpath('assets')
-_PNG_SUITE_DIR = _ASSETS_DIR.joinpath('png-suite')
+_PNG_SUITE_DIR = _ASSETS_DIR.joinpath('pngsuite')
 _WPT_DIR = _ASSETS_DIR.joinpath('wpt')
 _WPT_PNG_DIR = _WPT_DIR.joinpath('png', 'support')
 _APNG_DIR = _WPT_DIR.joinpath('png', 'apng')

@@ -507,7 +507,7 @@ creator registration is advisory. See the
 
 ## Development
 
-Tests use the original [PngSuite](assets/png-suite/SOURCE.md) images and pinned
+Tests use the original [PngSuite](assets/pngsuite/SOURCE.md) images and pinned
 [WPT APNG fixtures and reference images](assets/wpt/README.md). From a checkout:
 
 ```shell
