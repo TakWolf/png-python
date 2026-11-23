@@ -4,6 +4,7 @@ from fractions import Fraction
 from typing import TYPE_CHECKING
 
 from png.animation import PngRenderedFrame
+from png.bitmap import PngBitmap
 from png.chunk import PngChunk
 from png.format import PngBlendOp, PngColorType, PngDisposeOp
 from png.header import PngHeader
@@ -13,7 +14,7 @@ if TYPE_CHECKING:
     from png.image import PngImage
 
 
-def _rgba_rows(image: 'PngImage', bitmap: list[list[int]], depth: int) -> list[list[int]]:
+def _rgba_rows(image: 'PngImage', bitmap: PngBitmap, depth: int) -> list[list[int]]:
     maximum = (1 << depth) - 1
     source_maximum = (1 << image.header.bit_depth) - 1
     kind = image.header.color_type

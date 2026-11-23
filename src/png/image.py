@@ -10,8 +10,9 @@ from png._apng import frame_header, scan_animation
 from png._limits import ReadBudget
 from png._pixels import decode_pixels, encode_pixels
 from png._structure import _BEFORE_DATA, _BEFORE_PALETTE, validate_structure
-from png._validation import check_integer
+from png._validation import check_boolean, check_integer
 from png.animation import PngAnimation, PngFrame, PngRenderedFrame
+from png.bitmap import PngBitmap
 from png.chunk import PngChunk
 from png.document import PngDocument
 from png.error import PngParseError, PngValidationError
@@ -39,7 +40,7 @@ class PngImage:
     """
 
     header: PngHeader
-    bitmap: list[list[int]]
+    bitmap: PngBitmap
     palette: list[tuple[int, int, int]]
     transparent_color: tuple[int, ...] | None
     palette_alpha: list[int]
@@ -51,7 +52,7 @@ class PngImage:
     def __init__(
         self,
         header: PngHeader,
-        bitmap: list[list[int]] | None = None,
+        bitmap: PngBitmap | None = None,
         palette: list[tuple[int, int, int]] | None = None,
         transparent_color: tuple[int, ...] | None = None,
         palette_alpha: list[int] | None = None,
@@ -72,7 +73,7 @@ class PngImage:
     @staticmethod
     def from_samples(
         dimensions: tuple[int, int],
-        bitmap: list[list[int]],
+        bitmap: PngBitmap,
         sample_depth: int | tuple[int, ...],
         color_type: PngColorType = PngColorType.TRUECOLOR_ALPHA,
         *,
@@ -115,17 +116,22 @@ class PngImage:
         return image
 
     @staticmethod
-    def from_document(document: PngDocument, *, limits: PngReadLimits | None = None) -> PngImage:
+    def from_document(document: PngDocument, *, limits: PngReadLimits | None = None, compact: bool = False) -> PngImage:
         """Decode an independent image, preserving original sample depth."""
+        check_boolean('compact', compact)
         metadata = validate_structure(document.chunks, limits=limits)
-        return PngImage._from_validated_document(document, metadata)
+        return PngImage._from_validated_document(document, metadata, compact=compact)
 
     @staticmethod
-    def _from_validated_document(document: PngDocument, metadata: list[PngMetadata | None]) -> PngImage:
+    def _from_validated_document(
+        document: PngDocument, metadata: list[PngMetadata | None], *, compact: bool = False
+    ) -> PngImage:
         # Operation-local shortcut: callers must have just validated the document.
         # Never cache validation on these mutable models.
         header = PngHeader.from_chunk(document.chunks[0])
-        image = PngImage(header, decode_pixels(header, (chunk.data for chunk in document.find_chunks(b'IDAT'))))
+        image = PngImage(
+            header, decode_pixels(header, (chunk.data for chunk in document.find_chunks(b'IDAT')), compact=compact)
+        )
         animation = scan_animation(document.chunks, header)
         if animation is not None:
             plays, frames = animation
@@ -135,7 +141,7 @@ class PngImage:
                     image.animation.default_image_control = control
                 else:
                     bitmap = decode_pixels(
-                        frame_header(header, control.dimensions), (chunk.data[4:] for chunk in blocks)
+                        frame_header(header, control.dimensions), (chunk.data[4:] for chunk in blocks), compact=compact
                     )
                     image.animation.frames.append(PngFrame(control, bitmap))
         before_data = True
@@ -180,20 +186,22 @@ class PngImage:
         return image
 
     @staticmethod
-    def parse(stream: bytes | BinaryIO, *, limits: PngReadLimits | None = None) -> PngImage:
+    def parse(stream: bytes | BinaryIO, *, limits: PngReadLimits | None = None, compact: bool = False) -> PngImage:
+        check_boolean('compact', compact)
         ReadBudget(limits)  # Invalid application policy is not corrupt PNG input.
         try:
             document, metadata = PngDocument._parse(stream, limits=limits)
-            return PngImage._from_validated_document(document, metadata)
+            return PngImage._from_validated_document(document, metadata, compact=compact)
         except PngValidationError as error:
             raise PngParseError(str(error)) from error
 
     @staticmethod
-    def load(file_path: str | PathLike[str], *, limits: PngReadLimits | None = None) -> PngImage:
+    def load(file_path: str | PathLike[str], *, limits: PngReadLimits | None = None, compact: bool = False) -> PngImage:
         """Read a whole PNG file, checking its boundary before decoding pixels."""
+        check_boolean('compact', compact)
         document, metadata = PngDocument._load(file_path, limits=limits)
         try:
-            return PngImage._from_validated_document(document, metadata)
+            return PngImage._from_validated_document(document, metadata, compact=compact)
         except PngValidationError as error:
             raise PngParseError(str(error)) from error
 
@@ -516,7 +524,7 @@ class PngImage:
                 if any(frequencies[index] == 0 for bitmap in bitmaps for row in bitmap for index in row):
                     raise PngValidationError('hIST must have a nonzero frequency for every used palette index')
 
-    def _validate_bitmap(self, bitmap: list[list[int]], dimensions: tuple[int, int]) -> None:
+    def _validate_bitmap(self, bitmap: PngBitmap, dimensions: tuple[int, int]) -> None:
         width, height = dimensions
         if len(bitmap) != height:
             raise PngValidationError(f'expected {height} bitmap rows, got {len(bitmap)}')

@@ -1,11 +1,14 @@
 """PNG Third Edition sections 7-10: samples, Adam7, filters and zlib."""
 
+import sys
 import zlib
+from array import array
 from collections.abc import Iterable, Iterator
 from struct import iter_unpack, pack
 
 from png._scanlines import scan_passes
 from png._validation import check_integer
+from png.bitmap import PngBitmap, PngRow
 from png.error import PngParseError
 from png.format import PngColorType, PngCompressionStrategy, PngFilterType, PngInterlaceMethod
 from png.header import PngHeader
@@ -139,20 +142,38 @@ def _filter_and_score(kind: int, row: bytes, previous: bytes, stride: int, trial
     return score
 
 
-def _unpack_samples(row: bytes, depth: int, count: int) -> list[int]:
+def _unpack_samples(row: bytes, depth: int, count: int, *, compact: bool = False) -> PngRow:
     if depth == 8:
-        return list(row)
+        return bytearray(row) if compact else list(row)
     if depth == 16:
+        if compact:
+            samples = array('H')
+            if samples.itemsize == 2:
+                samples.frombytes(row)
+                if sys.byteorder == 'little':
+                    samples.byteswap()
+            else:
+                samples.extend(sample for (sample,) in iter_unpack('>H', row))
+            return samples
         return [sample for (sample,) in iter_unpack('>H', row)]
     per_byte = 8 // depth
     mask = (1 << depth) - 1
+    if compact:
+        return bytearray(
+            (row[index // per_byte] >> (8 - depth * (index % per_byte + 1))) & mask for index in range(count)
+        )
     return [(row[index // per_byte] >> (8 - depth * (index % per_byte + 1))) & mask for index in range(count)]
 
 
-def _pack_samples(samples: list[int], depth: int) -> bytes:
+def _pack_samples(samples: PngRow, depth: int) -> bytes:
     if depth == 8:
         return bytes(samples)
     if depth == 16:
+        if isinstance(samples, array) and samples.typecode == 'H' and samples.itemsize == 2:
+            if sys.byteorder == 'little':
+                samples = array('H', samples)
+                samples.byteswap()
+            return samples.tobytes()
         return pack(f'>{len(samples)}H', *samples)
     data = bytearray((len(samples) * depth + 7) // 8)
     per_byte = 8 // depth
@@ -161,7 +182,15 @@ def _pack_samples(samples: list[int], depth: int) -> bytes:
     return bytes(data)
 
 
-def decode_pixels(header: PngHeader, blocks: Iterable[bytes]) -> list[list[int]]:
+def _empty_row(count: int, depth: int, compact: bool) -> PngRow:
+    if not compact:
+        return [0] * count
+    if depth == 16:
+        return array('H', [0]) * count
+    return bytearray(count)
+
+
+def decode_pixels(header: PngHeader, blocks: Iterable[bytes], *, compact: bool = False) -> PngBitmap:
     passes = list(_passes(header))
     channels = header.channels
     expected_size = sum(((width * header.bits_per_pixel + 7) // 8 + 1) * height for _, _, _, _, width, height in passes)
@@ -170,7 +199,7 @@ def decode_pixels(header: PngHeader, blocks: Iterable[bytes]) -> list[list[int]]
     bitmap = (
         []
         if header.interlace_method == PngInterlaceMethod.NONE
-        else [[0] * (header.width * channels) for _ in range(header.height)]
+        else [_empty_row(header.width * channels, header.bit_depth, compact) for _row in range(header.height)]
     )
     stride = max(1, (header.bits_per_pixel + 7) // 8)
     offset = 0
@@ -181,7 +210,7 @@ def decode_pixels(header: PngHeader, blocks: Iterable[bytes]) -> list[list[int]]
             row = _unfilter(data[offset], data[offset + 1 : offset + row_size + 1], previous, stride)
             offset += row_size + 1
             previous = row
-            samples = _unpack_samples(row, header.bit_depth, width * channels)
+            samples = _unpack_samples(row, header.bit_depth, width * channels, compact=compact)
             if header.interlace_method == PngInterlaceMethod.NONE:
                 bitmap.append(samples)
                 continue
@@ -194,7 +223,7 @@ def decode_pixels(header: PngHeader, blocks: Iterable[bytes]) -> list[list[int]]
 
 def encode_pixels(
     header: PngHeader,
-    bitmap: list[list[int]],
+    bitmap: PngBitmap,
     filter_type: PngFilterType | None,
     compression_level: int,
     compression_strategy: PngCompressionStrategy = PngCompressionStrategy.DEFAULT,

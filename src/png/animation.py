@@ -5,6 +5,7 @@ from struct import pack, unpack
 from typing import TYPE_CHECKING
 
 from png._validation import check_integer
+from png.bitmap import PngBitmap
 from png.chunk import PngChunk
 from png.error import PngValidationError
 from png.format import PngBlendOp, PngDisposeOp
@@ -117,9 +118,9 @@ class PngFrame:
     """A local animation frame with unpacked, interleaved sample rows."""
 
     control: PngFrameControl
-    bitmap: list[list[int]]
+    bitmap: PngBitmap
 
-    def __init__(self, control: PngFrameControl, bitmap: list[list[int]] | None = None) -> None:
+    def __init__(self, control: PngFrameControl, bitmap: PngBitmap | None = None) -> None:
         self.control = control
         self.bitmap = bitmap if bitmap is not None else []
 

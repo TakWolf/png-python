@@ -1,4 +1,5 @@
 from png.animation import PngAnimation, PngFrame, PngFrameControl, PngRenderedFrame
+from png.bitmap import PngBitmap, PngRow
 from png.chunk import PngChunk
 from png.document import PngDocument
 from png.error import PngCrcError, PngError, PngLimitError, PngParseError, PngUnsupportedError, PngValidationError
@@ -54,6 +55,7 @@ from png.metadata import (
 __all__ = [
     'PngAnimation',
     'PngBackground',
+    'PngBitmap',
     'PngBlendOp',
     'PngCalibration',
     'PngCalibrationEquation',
@@ -95,6 +97,7 @@ __all__ = [
     'PngReadLimits',
     'PngRenderedFrame',
     'PngRenderingIntent',
+    'PngRow',
     'PngScaleUnit',
     'PngSignificantBits',
     'PngSrgb',

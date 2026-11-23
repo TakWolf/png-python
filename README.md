@@ -53,6 +53,21 @@ Every row has `width * header.channels` integers. Color samples range from zero
 to `(1 << bit_depth) - 1`; palette indices select entries from `image.palette`.
 Decoded samples retain the stored bit depth, including 16-bit values.
 
+For large images, `PngImage.load(path, compact=True)`, `parse(data, compact=True)`
+and `from_document(document, compact=True)` store rows in mutable compact
+containers: `bytearray` for 1–8-bit samples and `array('H')` for 16-bit samples.
+Low-depth samples remain unpacked, one integer per sample. APNG local frames
+use the same storage. The default remains a list of integer lists.
+
+Compact rows support integer indexing and mutation. Their slice assignment
+follows the container's own rules (`bytes`/`bytearray` for `bytearray`, and a
+matching array for `array('H')`); use `list(row)` when a plain list is needed.
+16-bit integers retain their numeric value on every host; the library handles
+PNG's big-endian encoding. Saving never swaps the source array in place.
+`deepcopy()` makes independent rows, while constructors retain supplied rows.
+RGBA conversion and rendered snapshots continue to return independent list rows.
+The exported `PngRow` and `PngBitmap` aliases describe the supported containers.
+
 ### Read and modify pixels
 
 Continue with `created.png` from the previous example:
