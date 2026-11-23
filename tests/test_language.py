@@ -234,8 +234,8 @@ def test_official_image_keeps_repeated_language_metadata(png_suite_dir: Path) ->
     assert restored.bitmap == image.bitmap
 
 
-def test_original_iana_snapshots_and_generated_module(project_root_dir: Path) -> None:
-    directory = project_root_dir.joinpath('assets', 'iana')
+def test_original_iana_snapshots_and_generated_module(project_root_dir: Path, assets_dir: Path) -> None:
+    directory = assets_dir.joinpath('iana')
     manifest = json.loads(directory.joinpath('SOURCE.json').read_text())
     assert [record['file_date'] for record in manifest['files']] == ['2026-09-17', '2014-04-02']
     for record in manifest['files']:
@@ -248,10 +248,10 @@ def test_original_iana_snapshots_and_generated_module(project_root_dir: Path) ->
     )
 
 
-def test_every_registry_entry_can_be_used_in_its_registered_position(project_root_dir: Path) -> None:
+def test_every_registry_entry_can_be_used_in_its_registered_position(assets_dir: Path) -> None:
     # Read raw records independently of the generator. This also detects values
     # split or lost when formatting the compact generated tables.
-    source = project_root_dir.joinpath('assets', 'iana', 'language-subtag-registry.txt').read_text(encoding='utf-8')
+    source = assets_dir.joinpath('iana', 'language-subtag-registry.txt').read_text(encoding='utf-8')
     counts = {}
     for block in source.split('%%')[1:]:
         fields = {}

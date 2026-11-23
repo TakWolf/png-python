@@ -21,16 +21,11 @@ from png import (
     PngValidationError,
 )
 
-_SUITE_DIR = Path(__file__).parents[1].joinpath('assets', 'png-suite')
-_VALID_NAMES = sorted(path.name for path in _SUITE_DIR.glob('*.png') if not path.name.startswith('x'))
-_BASE_NAMES = sorted(path.name for path in _SUITE_DIR.glob('basn*.png'))
 
-
-@pytest.mark.parametrize('name', _VALID_NAMES)
-def test_pngsuite_pixel_roundtrip(png_suite_dir: Path, tmp_path: Path, name: str) -> None:
-    original = PngImage.load(png_suite_dir.joinpath(name))
+def test_pngsuite_pixel_roundtrip(png_suite_file: Path, tmp_path: Path) -> None:
+    original = PngImage.load(png_suite_file)
     original.validate()
-    destination = tmp_path.joinpath(name)
+    destination = tmp_path.joinpath(png_suite_file.name)
     original.save(destination)
     decoded = PngImage.load(str(destination))
     assert decoded.header.to_chunk().data == original.header.to_chunk().data
@@ -40,10 +35,9 @@ def test_pngsuite_pixel_roundtrip(png_suite_dir: Path, tmp_path: Path, name: str
     assert decoded.palette_alpha == original.palette_alpha
 
 
-@pytest.mark.parametrize('name', _BASE_NAMES)
-def test_pngsuite_independent_adam7_pair(png_suite_dir: Path, name: str) -> None:
-    plain = PngImage.load(png_suite_dir.joinpath(name))
-    interlaced = PngImage.load(png_suite_dir.joinpath(name.replace('basn', 'basi')))
+def test_pngsuite_independent_adam7_pair(png_suite_dir: Path, png_suite_base_file: Path) -> None:
+    plain = PngImage.load(png_suite_base_file)
+    interlaced = PngImage.load(png_suite_dir.joinpath(png_suite_base_file.name.replace('basn', 'basi')))
     assert plain.bitmap == interlaced.bitmap
     assert plain.palette == interlaced.palette
 
@@ -58,18 +52,16 @@ def test_pngsuite_independent_filter_pairs(png_suite_dir: Path, suffix: str, kin
     assert filtered.bitmap[:8] == plain.bitmap[:8]
 
 
-@pytest.mark.parametrize('name', _BASE_NAMES)
 @pytest.mark.parametrize('kind', list(PngFilterType))
 @pytest.mark.parametrize('interlace', list(PngInterlaceMethod))
 @pytest.mark.parametrize('dimensions', [(1, 1), (2, 3), (9, 5)])
 def test_encoding_formats_filters_and_small_passes(
-    png_suite_dir: Path,
-    name: str,
+    png_suite_base_file: Path,
     kind: PngFilterType,
     interlace: PngInterlaceMethod,
     dimensions: tuple[int, int],
 ) -> None:
-    source = PngImage.load(png_suite_dir.joinpath(name))
+    source = PngImage.load(png_suite_base_file)
     width, height = dimensions
     source.header.dimensions = dimensions
     source.header.interlace_method = interlace

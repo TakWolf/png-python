@@ -43,15 +43,16 @@ def test_unknown_or_ambiguous_registration_is_unsupported_not_invalid(assets_dir
         metadata.validate_profile_tags()
 
 
-def test_registry_snapshot_provenance_and_reproducible_tables(assets_dir):
+def test_registry_snapshot_provenance_and_reproducible_tables(assets_dir: Path, project_root_dir: Path):
     directory = assets_dir.joinpath('icc', 'registry')
     for record in json.loads(directory.joinpath('SOURCE.json').read_text())['files']:
         assert hashlib.sha256(directory.joinpath(record['path']).read_bytes()).hexdigest() == record['sha256']
-    root = Path(__file__).resolve().parents[1]
-    spec = importlib.util.spec_from_file_location('icc_generator', root.joinpath('tools', 'generate_icc_registry.py'))
+    spec = importlib.util.spec_from_file_location(
+        'icc_generator', project_root_dir.joinpath('tools', 'generate_icc_registry.py')
+    )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    assert module.generate() == root.joinpath('src', 'png', '_icc_registry_data.py').read_text()
+    assert module.generate() == project_root_dir.joinpath('src', 'png', '_icc_registry_data.py').read_text()
 
 
 def test_characterization_reference_names_require_exact_registered_spelling():

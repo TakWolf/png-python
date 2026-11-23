@@ -1,25 +1,19 @@
 from array import array
 from copy import deepcopy
 from io import BytesIO
-from pathlib import Path
 
 import pytest
 
 from png import PngColorType, PngDocument, PngHeader, PngImage, PngInterlaceMethod, PngValidationError
-
-_ASSETS = Path(__file__).parents[1] / 'assets'
-_SUITE = sorted(path for path in (_ASSETS / 'png-suite').glob('*.png') if not path.name.startswith('x'))
-_ANIMATIONS = sorted((_ASSETS / 'wpt/png/apng/support').glob('[0-9]*.png'))
 
 
 def _rows(bitmap):
     return [list(row) for row in bitmap]
 
 
-@pytest.mark.parametrize('path', _SUITE, ids=lambda path: path.name)
-def test_compact_official_samples_conversion_and_roundtrip(path):
-    original = PngImage.load(path)
-    compact = PngImage.load(path, compact=True)
+def test_compact_official_samples_conversion_and_roundtrip(png_suite_file):
+    original = PngImage.load(png_suite_file)
+    compact = PngImage.load(png_suite_file, compact=True)
     assert _rows(compact.bitmap) == original.bitmap
     assert all(isinstance(row, array if compact.header.bit_depth == 16 else bytearray) for row in compact.bitmap)
     assert compact.to_rgba().bitmap == original.to_rgba().bitmap
@@ -29,10 +23,9 @@ def test_compact_official_samples_conversion_and_roundtrip(path):
     assert independent.bitmap[0][0] != compact.bitmap[0][0]
 
 
-@pytest.mark.parametrize('path', _ANIMATIONS, ids=lambda path: path.name)
-def test_compact_animation_samples_composition_and_roundtrip(path):
-    original = PngImage.load(path)
-    compact = PngImage.load(path, compact=True)
+def test_compact_animation_samples_composition_and_roundtrip(apng_file):
+    original = PngImage.load(apng_file)
+    compact = PngImage.load(apng_file, compact=True)
     assert _rows(compact.bitmap) == original.bitmap
     for actual, expected in zip(compact.animation.frames, original.animation.frames, strict=True):
         assert _rows(actual.bitmap) == expected.bitmap
@@ -86,6 +79,6 @@ def test_invalid_compact_option_precedes_input_access(compact, tmp_path):
         PngImage.parse(stream, compact=compact)
     assert stream.tell() == 0
     with pytest.raises(PngValidationError, match='compact'):
-        PngImage.load(tmp_path / 'absent.png', compact=compact)
+        PngImage.load(tmp_path.joinpath('absent.png'), compact=compact)
     with pytest.raises(PngValidationError, match='compact'):
         PngImage.from_document(PngDocument(), compact=compact)

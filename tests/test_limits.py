@@ -336,13 +336,13 @@ def test_crc_and_format_errors_keep_their_types_with_limits(png_suite_dir: Path)
     assert not isinstance(caught.value, PngLimitError)
 
 
-def test_unrestricted_policy_preserves_pngsuite_and_wpt_behavior(png_suite_dir: Path, assets_dir: Path) -> None:
+def test_unrestricted_policy_preserves_pngsuite_and_wpt_behavior(png_suite_dir: Path, apng_dir: Path) -> None:
     policy = PngReadLimits()
     for path in [
         png_suite_dir.joinpath('basn0g01.png'),
         png_suite_dir.joinpath('basn6a16.png'),
         png_suite_dir.joinpath('basn3p08.png'),
-        assets_dir.joinpath('wpt', 'png', 'apng', 'support', '001.png'),
+        apng_dir.joinpath('support', '001.png'),
     ]:
         original = PngImage.load(path)
         bounded = PngImage.load(path, limits=policy)

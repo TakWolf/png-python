@@ -215,12 +215,12 @@ def test_icc_header_properties_derive_from_current_payload(truncated_icc_profile
 
 
 def test_wpt_truncated_inner_icc_is_preserved_for_inspection_but_not_written(
-    assets_dir: Path,
+    wpt_png_dir: Path,
     truncated_icc_profile_bytes: bytes,
 ) -> None:
     # The final chad entry ends at 2992, four bytes beyond this WPT payload.
     # Reading keeps the original bytes; the writer must not silently repair them.
-    document = PngDocument.load(assets_dir.joinpath('wpt', 'png', 'support', 'cICP-and-iCCP.png'))
+    document = PngDocument.load(wpt_png_dir.joinpath('cICP-and-iCCP.png'))
     image = PngImage.from_document(document)
     (profile,) = image.find_metadata(b'iCCP')
     assert profile.profile == truncated_icc_profile_bytes

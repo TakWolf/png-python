@@ -37,7 +37,7 @@ def _streams(document: PngDocument) -> list[bytes]:
 @pytest.mark.parametrize('strategy', list(PngCompressionStrategy))
 @pytest.mark.parametrize('name', _SAMPLES)
 def test_official_samples_use_requested_strategy(png_suite_dir: Path, name: str, strategy) -> None:
-    image = PngImage.load(png_suite_dir / name)
+    image = PngImage.load(png_suite_dir.joinpath(name))
     # zlib-ng may encode the same bytes differently when fed scanlines rather
     # than one buffer. Check strategy forwarding and decompressed data instead.
     default = image.to_document(filter_type=PngFilterType.NONE)
@@ -59,8 +59,8 @@ def test_official_samples_use_requested_strategy(png_suite_dir: Path, name: str,
 
 @pytest.mark.parametrize('strategy', list(PngCompressionStrategy))
 @pytest.mark.parametrize('name', ['007.png', '062.png'])
-def test_strategy_reaches_every_apng_frame(assets_dir: Path, name: str, strategy) -> None:
-    image = PngImage.load(assets_dir / 'wpt/png/apng/support' / name)
+def test_strategy_reaches_every_apng_frame(apng_dir: Path, name: str, strategy) -> None:
+    image = PngImage.load(apng_dir.joinpath('support', name))
     default = image.to_document(filter_type=PngFilterType.NONE)
     raw = [zlib.decompress(data) for data in _streams(default)]
     with patch('png._pixels.zlib.compressobj', wraps=zlib.compressobj) as compressobj:
@@ -80,40 +80,40 @@ def test_strategy_reaches_every_apng_frame(assets_dir: Path, name: str, strategy
 
 
 def test_strategy_is_available_on_all_output_apis(png_suite_dir: Path, tmp_path: Path) -> None:
-    image = PngImage.load(png_suite_dir / 'basn6a08.png')
+    image = PngImage.load(png_suite_dir.joinpath('basn6a08.png'))
     options = {'compression_strategy': PngCompressionStrategy.RLE, 'compression_level': 1}
     expected = image.to_document(**options).dump_to_bytes()
     assert image.dump_to_bytes(**options) == expected
     stream = BytesIO()
     image.dump(stream, **options)
     assert stream.getvalue() == expected
-    destination = tmp_path / 'rle.png'
+    destination = tmp_path.joinpath('rle.png')
     image.save(destination, **options)
     assert destination.read_bytes() == expected
 
 
 @pytest.mark.parametrize('invalid', [-1, 5, True, False, 1.0, 'RLE', None, 1 << 64])
 def test_invalid_strategy_preserves_output(png_suite_dir: Path, tmp_path: Path, invalid) -> None:
-    image = PngImage.load(png_suite_dir / 'basn0g01.png')
+    image = PngImage.load(png_suite_dir.joinpath('basn0g01.png'))
     stream = BytesIO(b'keep stream')
     stream.seek(3)
     with pytest.raises(PngValidationError, match='compression strategy'):
         image.dump(stream, compression_strategy=invalid)
     assert stream.getvalue() == b'keep stream'
     assert stream.tell() == 3
-    destination = tmp_path / 'preserved.png'
+    destination = tmp_path.joinpath('preserved.png')
     destination.write_bytes(b'keep file')
     with pytest.raises(PngValidationError, match='compression strategy'):
         image.save(destination, compression_strategy=invalid)
     assert destination.read_bytes() == b'keep file'
-    missing = tmp_path / 'not-created.png'
+    missing = tmp_path.joinpath('not-created.png')
     with pytest.raises(PngValidationError, match='compression strategy'):
         image.save(missing, compression_strategy=invalid)
     assert not missing.exists()
 
 
 def test_strategy_keeps_metadata_compression(png_suite_dir: Path, icc_profile_bytes: bytes) -> None:
-    image = PngImage.load(png_suite_dir / 'basn6a08.png')
+    image = PngImage.load(png_suite_dir.joinpath('basn6a08.png'))
     image.metadata.extend(
         [
             PngCompressedText('Comment', 'Repeated text ' * 20),

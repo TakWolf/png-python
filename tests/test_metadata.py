@@ -30,25 +30,18 @@ from png import (
     PngValidationError,
 )
 
-_ROOT = Path(__file__).parents[1]
-_SUITE = _ROOT.joinpath('assets', 'png-suite')
-_WPT = _ROOT.joinpath('assets', 'wpt', 'png', 'support')
-_VALID = sorted(path.name for path in _SUITE.glob('*.png') if not path.name.startswith('x'))
 
-
-@pytest.mark.parametrize('name', _VALID)
-def test_pngsuite_metadata_is_preserved(png_suite_dir: Path, name: str) -> None:
-    image = PngImage.load(png_suite_dir.joinpath(name))
+def test_pngsuite_metadata_is_preserved(png_suite_file: Path) -> None:
+    image = PngImage.load(png_suite_file)
     restored = PngImage.parse(image.dump_to_bytes())
     assert [(item.type, item.to_chunk().data) for item in restored.metadata] == [
         (item.type, item.to_chunk().data) for item in image.metadata
     ]
 
 
-@pytest.mark.parametrize('path', sorted(_WPT.glob('*.png')), ids=lambda path: path.name)
-def test_wpt_color_and_exif_metadata(path: Path) -> None:
-    image = PngImage.load(path)
-    if path.name == 'cICP-and-iCCP.png':
+def test_wpt_color_and_exif_metadata(wpt_png_file: Path) -> None:
+    image = PngImage.load(wpt_png_file)
+    if wpt_png_file.name == 'cICP-and-iCCP.png':
         # Its ICC profile is truncated internally, despite being an official
         # PNG fixture. Reading preserves it; conforming output must reject it.
         with pytest.raises(PngValidationError, match='ICC declared size'):
@@ -220,8 +213,8 @@ def test_invalid_metadata_fields(value) -> None:
         value.validate()
 
 
-def test_icc_profile_bytes_preserved_and_decoded_with_independent_zlib() -> None:
-    document = PngDocument.load(_WPT.joinpath('cICP-and-iCCP.png'))
+def test_icc_profile_bytes_preserved_and_decoded_with_independent_zlib(wpt_png_dir: Path) -> None:
+    document = PngDocument.load(wpt_png_dir.joinpath('cICP-and-iCCP.png'))
     raw = document.find_chunks(b'iCCP')[0]
     expected = zlib.decompress(raw.data.split(b'\0', 1)[1][1:])
     image = PngImage.from_document(document)
@@ -234,8 +227,8 @@ def test_icc_profile_bytes_preserved_and_decoded_with_independent_zlib() -> None
     assert image.to_document().find_chunks(b'iCCP')[0].data == profile.to_chunk().data
 
 
-def test_exif_profile_bytes_are_not_rewritten() -> None:
-    document = PngDocument.load(_WPT.joinpath('exif-orientation-bottom-right.png'))
+def test_exif_profile_bytes_are_not_rewritten(wpt_png_dir: Path) -> None:
+    document = PngDocument.load(wpt_png_dir.joinpath('exif-orientation-bottom-right.png'))
     original = document.find_chunks(b'eXIf')[0].data
     image = PngImage.from_document(document)
     assert isinstance(image.find_metadata(b'eXIf')[0], PngExif)

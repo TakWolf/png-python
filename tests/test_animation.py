@@ -25,32 +25,30 @@ from png import (
     PngValidationError,
 )
 
-_WPT_ROOT = Path(__file__).parents[1].joinpath('assets', 'wpt')
-_APNG_ROOT = _WPT_ROOT.joinpath('png', 'apng')
-_ANIMATED = sorted(path.name for path in _APNG_ROOT.joinpath('support').glob('[0-9]*.png'))
-_VISUAL = sorted(
-    path.name
-    for path in _APNG_ROOT.glob('*.html')
-    if 'rel="match"' in path.read_text() and path.name != 'fDAT-inherits-cICP.html'
-)
-_BASIC = sorted(path.name for path in Path(__file__).parents[1].joinpath('assets', 'png-suite').glob('basn*.png'))
 
-
-def test_wpt_provenance() -> None:
-    manifest = json.loads(_WPT_ROOT.joinpath('SOURCE.json').read_text())
+def test_wpt_provenance(wpt_dir: Path, apng_dir: Path) -> None:
+    manifest = json.loads(wpt_dir.joinpath('SOURCE.json').read_text())
     assert manifest['commit'] == '44d24bce619f53d07b311f2732f2c50adc407399'
     assert len(manifest['files']) == 89
-    assert len(_ANIMATED) == 35
-    assert len(_VISUAL) == 28
+    assert len(list(apng_dir.joinpath('support').glob('[0-9]*.png'))) == 35
+    assert (
+        len(
+            [
+                path
+                for path in apng_dir.glob('*.html')
+                if 'rel="match"' in path.read_text() and path.name != 'fDAT-inherits-cICP.html'
+            ]
+        )
+        == 28
+    )
     for entry in manifest['files']:
-        data = _WPT_ROOT.joinpath(entry['path']).read_bytes()
+        data = wpt_dir.joinpath(entry['path']).read_bytes()
         assert hashlib.sha256(data).hexdigest() == entry['sha256']
         assert hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest() == entry['git_blob']
 
 
-@pytest.mark.parametrize('name', _ANIMATED)
-def test_wpt_animation_roundtrip(name: str) -> None:
-    original = PngImage.load(_APNG_ROOT.joinpath('support', name))
+def test_wpt_animation_roundtrip(apng_file: Path) -> None:
+    original = PngImage.load(apng_file)
     assert original.animation is not None
     restored = PngImage.parse(original.dump_to_bytes(idat_chunk_size=17))
     assert restored.bitmap == original.bitmap
@@ -82,26 +80,25 @@ def _visible_rgba8(image: PngImage) -> list[list[int]]:
     return result
 
 
-@pytest.mark.parametrize('name', _VISUAL)
-def test_wpt_final_state_matches_official_reference(name: str) -> None:
-    html = _APNG_ROOT.joinpath(name).read_text()
+def test_wpt_final_state_matches_official_reference(apng_visual_file: Path, apng_dir: Path) -> None:
+    html = apng_visual_file.read_text()
     (source,) = re.findall(r'src="(support/[^"]+\.png)"', html)
     (reference,) = re.findall(r'rel="match" href="([^"]+)"', html)
-    image = PngImage.load(_APNG_ROOT.joinpath(source))
+    image = PngImage.load(apng_dir.joinpath(source))
     last = None
     for frame in image.render_frames():
         last = frame.image
-    expected_files = re.findall(r'src="(support/[^"]+\.png)"', _APNG_ROOT.joinpath(reference).read_text())
+    expected_files = re.findall(r'src="(support/[^"]+\.png)"', apng_dir.joinpath(reference).read_text())
     if expected_files:
-        expected = next(PngImage.load(_APNG_ROOT.joinpath(expected_files[0])).render_frames()).image
+        expected = next(PngImage.load(apng_dir.joinpath(expected_files[0])).render_frames()).image
         assert _visible_rgba8(last) == _visible_rgba8(expected)
     else:
         # The checkerboard reference has no foreground image at all.
         assert all(row[index] == 0 for row in last.bitmap for index in range(3, len(row), 4))
 
 
-def test_color_metadata_inherited_by_rendered_frame() -> None:
-    image = PngImage.load(_APNG_ROOT.joinpath('support', '062.png'))
+def test_color_metadata_inherited_by_rendered_frame(apng_dir: Path) -> None:
+    image = PngImage.load(apng_dir.joinpath('support', '062.png'))
     expected = [item.to_chunk().data for item in image.find_metadata(b'cICP')]
     assert len(expected) == 1
     for rendered in image.render_frames():
@@ -120,8 +117,10 @@ def test_static_rgba_snapshot_preserves_official_pixel_dimensions(png_suite_dir:
 
 
 @pytest.mark.parametrize('as_raw', [False, True])
-def test_apng_snapshots_inherit_pixel_dimensions_without_resampling(png_suite_dir: Path, as_raw: bool) -> None:
-    image = PngImage.load(_APNG_ROOT.joinpath('support', '007.png'))
+def test_apng_snapshots_inherit_pixel_dimensions_without_resampling(
+    png_suite_dir: Path, apng_dir: Path, as_raw: bool
+) -> None:
+    image = PngImage.load(apng_dir.joinpath('support', '007.png'))
     baseline = [frame.image.bitmap for frame in image.render_frames()]
     (physical,) = PngImage.load(png_suite_dir.joinpath('cdhn2c08.png')).find_metadata(b'pHYs')
     original_bytes = physical.to_chunk().data
@@ -166,11 +165,10 @@ def test_gray_snapshot_preserves_pixel_dimensions_when_it_omits_gray_icc(
     assert rendered.image.find_metadata(b'pHYs')[0].to_chunk().data == physical.to_chunk().data
 
 
-@pytest.mark.parametrize('name', _BASIC)
 @pytest.mark.parametrize('interlace', list(PngInterlaceMethod))
 @pytest.mark.parametrize('poster', [True, False])
-def test_animation_encoding_all_sample_formats(png_suite_dir: Path, name: str, interlace, poster: bool) -> None:
-    image = PngImage.load(png_suite_dir.joinpath(name))
+def test_animation_encoding_all_sample_formats(png_suite_base_file: Path, interlace, poster: bool) -> None:
+    image = PngImage.load(png_suite_base_file)
     image.header.dimensions = (2, 1)
     image.header.interlace_method = interlace
     channels = image.header.channels
@@ -274,8 +272,8 @@ def test_raw_apng_rechunking_preserves_animation() -> None:
     assert restored.bitmap == _animation_image().bitmap
 
 
-def test_animation_sequence_and_empty_data_parts() -> None:
-    image = PngImage.load(_APNG_ROOT.joinpath('support', '006.png'))
+def test_animation_sequence_and_empty_data_parts(apng_dir: Path) -> None:
+    image = PngImage.load(apng_dir.joinpath('support', '006.png'))
     assert image.animation.num_frames == 1
     document = _animation_image().to_document(idat_chunk_size=1)
     sequence = [unpack('>I', chunk.data[:4])[0] for chunk in document.chunks if chunk.type in (b'fcTL', b'fdAT')]

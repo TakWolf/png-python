@@ -299,8 +299,8 @@ def test_document_and_image_writers_reject_bad_profiles_without_writing_or_mutat
     assert PngImage.parse(image.dump_to_bytes()).bitmap == image.bitmap
 
 
-def test_wpt_exif_structure_is_valid_and_payload_stays_exact(assets_dir: Path) -> None:
-    image = PngImage.load(assets_dir.joinpath('wpt', 'png', 'support', 'exif-orientation-bottom-right.png'))
+def test_wpt_exif_structure_is_valid_and_payload_stays_exact(wpt_png_dir: Path) -> None:
+    image = PngImage.load(wpt_png_dir.joinpath('exif-orientation-bottom-right.png'))
     (metadata,) = image.find_metadata(b'eXIf')
     original = metadata.profile
     metadata.validate_profile_structure()

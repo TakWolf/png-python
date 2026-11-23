@@ -6,29 +6,24 @@ import pytest
 
 from png import PngChunk, PngCrcError, PngDocument, PngHeader, PngParseError, PngValidationError
 
-_SUITE_DIR = Path(__file__).parents[1].joinpath('assets', 'png-suite')
-_VALID_NAMES = sorted(path.name for path in _SUITE_DIR.glob('*.png') if not path.name.startswith('x'))
-_INVALID_NAMES = sorted(path.name for path in _SUITE_DIR.glob('x*.png'))
-
 
 @pytest.fixture
 def document(png_suite_dir: Path) -> PngDocument:
     return PngDocument.load(png_suite_dir.joinpath('basn2c08.png'))
 
 
-def test_complete_pngsuite_is_available() -> None:
-    assert len(_VALID_NAMES) == 162
-    assert len(_INVALID_NAMES) == 14
+def test_complete_pngsuite_is_available(png_suite_dir: Path) -> None:
+    assert len([path for path in png_suite_dir.glob('*.png') if not path.name.startswith('x')]) == 162
+    assert len(list(png_suite_dir.glob('x*.png'))) == 14
 
 
-@pytest.mark.parametrize('name', _VALID_NAMES)
-def test_pngsuite_file_roundtrip(png_suite_dir: Path, tmp_path: Path, name: str) -> None:
-    source = png_suite_dir.joinpath(name)
+def test_pngsuite_file_roundtrip(png_suite_file: Path, tmp_path: Path) -> None:
+    source = png_suite_file
     document = PngDocument.load(source)
     # This is a raw-chunk round trip. It must retain the original payloads,
     # chunk boundaries, repeated chunks and their ordering without decoding.
     assert document.dump_to_bytes() == source.read_bytes()
-    destination = tmp_path.joinpath(name)
+    destination = tmp_path.joinpath(source.name)
     document.save(destination)
     loaded = PngDocument.load(str(destination))
     assert [(chunk.type, chunk.data) for chunk in loaded.chunks] == [
@@ -36,10 +31,9 @@ def test_pngsuite_file_roundtrip(png_suite_dir: Path, tmp_path: Path, name: str)
     ]
 
 
-@pytest.mark.parametrize('name', _INVALID_NAMES)
-def test_pngsuite_damaged_files(png_suite_dir: Path, name: str) -> None:
+def test_pngsuite_damaged_files(png_suite_invalid_file: Path) -> None:
     with pytest.raises(PngParseError):
-        PngDocument.load(png_suite_dir.joinpath(name))
+        PngDocument.load(png_suite_invalid_file)
 
 
 @pytest.mark.parametrize('name', ['xcsn0g01.png', 'xhdn0g08.png'])

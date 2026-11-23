@@ -33,7 +33,7 @@ def test_reading_parses_compressed_metadata_once_without_encoding(kind, entrypoi
     }[kind]
     data = PngImage(PngHeader((1, 1)), [[1, 2, 3, 255]], metadata=[item]).dump_to_bytes()
     document = PngDocument.parse(data)
-    path = tmp_path / 'source.png'
+    path = tmp_path.joinpath('source.png')
     path.write_bytes(data)
     with patch.object(metadata, '_inflate', wraps=metadata._inflate) as inflated:
         with patch.object(zlib, 'compress', side_effect=AssertionError('reading must not encode metadata')):
