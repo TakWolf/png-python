@@ -518,6 +518,7 @@ uv run -m pytest
 
 - [Portable Network Graphics (PNG) Specification and Extensions](https://www.libpng.org/pub/png/spec/)
 - [Portable Network Graphics (PNG) Specification (Third Edition)](https://www.w3.org/TR/png-3/)
+- [libpng - GitHub](https://github.com/pnggroup/libpng)
 - [PngSuite](http://www.schaik.com/pngsuite/)
 - [Web Platform Tests](https://github.com/web-platform-tests/wpt)
 - [ICC registry](https://registry.color.org/)
