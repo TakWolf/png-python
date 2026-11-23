@@ -267,7 +267,11 @@ def test_metadata_expansion_stops_with_one_byte_lookahead(
     kind: bytes,
 ) -> None:
     prefix = {b'zTXt': b'K\0\0', b'iTXt': b'K\0\x01\0\0\0', b'iCCP': b'K\0\0'}[kind]
-    document = _with_metadata(png_suite_dir, [PngChunk(kind, prefix + zlib.compress(b'A' * (2 * 1024 * 1024)))])
+    expanded = bytearray(b'A' * (2 * 1024 * 1024))
+    if kind == b'iCCP':
+        expanded[16:20] = b'RGB '
+        expanded[36:40] = b'acsp'
+    document = _with_metadata(png_suite_dir, [PngChunk(kind, prefix + zlib.compress(expanded))])
     # Serialize raw envelopes: normal dumping would first decompress metadata for validation.
     data = b'\x89PNG\r\n\x1a\n' + b''.join(chunk.dump_to_bytes() for chunk in document.chunks)
     actual_decompressobj = zlib.decompressobj

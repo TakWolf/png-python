@@ -4,6 +4,7 @@ from io import BytesIO
 from os import PathLike
 from typing import BinaryIO
 
+from png._apng import scan_animation
 from png._limits import ReadBudget
 from png._stream import read_exact, write_all
 from png._structure import UNDERSTOOD_TYPES, ChunkStructure, validate_structure
@@ -11,6 +12,7 @@ from png.chunk import PngChunk
 from png.error import PngParseError, PngValidationError
 from png.header import PngHeader
 from png.limits import PngReadLimits
+from png.metadata import PngMetadata, parse_metadata, validate_metadata_models
 
 _SIGNATURE = b'\x89PNG\r\n\x1a\n'
 
@@ -37,6 +39,12 @@ class PngDocument:
         pixels or the complete semantics of metadata and animation chunks.
         A supplied stream is neither closed nor rewound.
         """
+        return PngDocument._parse(stream, limits=limits)[0]
+
+    @staticmethod
+    def _parse(
+        stream: bytes | BinaryIO, *, limits: PngReadLimits | None = None
+    ) -> tuple[PngDocument, list[PngMetadata | None]]:
         budget = ReadBudget(limits)
         budget.signature()
         if isinstance(stream, bytes):
@@ -45,32 +53,61 @@ class PngDocument:
             raise PngParseError('not a valid PNG signature')
         document = PngDocument()
         structure = ChunkStructure()
+        metadata = []
+
+        def check_header(kind: bytes, length: int) -> None:
+            structure.check(kind, length)
+            if kind not in (
+                b'IHDR',
+                b'PLTE',
+                b'IDAT',
+                b'IEND',
+                b'tRNS',
+                b'acTL',
+                b'fcTL',
+                b'fdAT',
+                b'iCCP',
+                b'zTXt',
+                b'iTXt',
+            ):
+                budget.check('max_metadata_bytes', budget.metadata_bytes + length)
+
         while True:
             try:
-                chunk = PngChunk._parse(stream, budget, check_header=structure.check)
+                chunk = PngChunk._parse(stream, budget, check_header=check_header)
                 if not document.chunks:
                     structure.header = PngHeader.from_chunk(chunk)
+                budget.inspect(chunk.type, chunk.data)
+                metadata.append(parse_metadata(chunk, budget=budget))
             except PngValidationError as error:
                 raise PngParseError(str(error)) from error
-            budget.inspect(chunk.type, chunk.data)
             document.chunks.append(chunk)
             if chunk.type == b'IEND':
                 break
         try:
-            document.validate(limits=limits)
+            scan_animation(document.chunks, structure.header)
+            validate_metadata_models(
+                (item for item in metadata if item is not None), structure.header, structure.palette_size
+            )
         except PngValidationError as error:
             raise PngParseError(str(error)) from error
         document._original_chunks = tuple((chunk, chunk.type, chunk.data) for chunk in document.chunks)
-        return document
+        return document, metadata
 
     @staticmethod
     def load(file_path: str | PathLike[str], *, limits: PngReadLimits | None = None) -> PngDocument:
         """Read an entire PNG file; reject any content following IEND."""
+        return PngDocument._load(file_path, limits=limits)[0]
+
+    @staticmethod
+    def _load(
+        file_path: str | PathLike[str], *, limits: PngReadLimits | None = None
+    ) -> tuple[PngDocument, list[PngMetadata | None]]:
         with open(file_path, 'rb') as file:
-            document = PngDocument.parse(file, limits=limits)
+            result = PngDocument._parse(file, limits=limits)
             if file.read(1):
                 raise PngParseError('unexpected data after IEND')
-            return document
+            return result
 
     def find_chunks(self, chunk_type: bytes) -> list[PngChunk]:
         """Return references to matching chunks, in document order."""

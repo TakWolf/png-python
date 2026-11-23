@@ -9,7 +9,7 @@ from typing import BinaryIO
 from png._apng import frame_header, scan_animation
 from png._limits import ReadBudget
 from png._pixels import decode_pixels, encode_pixels
-from png._structure import _BEFORE_DATA, _BEFORE_PALETTE
+from png._structure import _BEFORE_DATA, _BEFORE_PALETTE, validate_structure
 from png._validation import check_integer
 from png.animation import PngAnimation, PngFrame, PngRenderedFrame
 from png.chunk import PngChunk
@@ -25,7 +25,7 @@ from png.metadata import (
     PngMetadata,
     PngSignificantBits,
     parse_metadata,
-    validate_metadata_chunks,
+    validate_metadata_models,
 )
 
 
@@ -117,11 +117,11 @@ class PngImage:
     @staticmethod
     def from_document(document: PngDocument, *, limits: PngReadLimits | None = None) -> PngImage:
         """Decode an independent image, preserving original sample depth."""
-        document.validate(limits=limits)
-        return PngImage._from_validated_document(document, limits=limits)
+        metadata = validate_structure(document.chunks, limits=limits)
+        return PngImage._from_validated_document(document, metadata)
 
     @staticmethod
-    def _from_validated_document(document: PngDocument, *, limits: PngReadLimits | None = None) -> PngImage:
+    def _from_validated_document(document: PngDocument, metadata: list[PngMetadata | None]) -> PngImage:
         # Operation-local shortcut: callers must have just validated the document.
         # Never cache validation on these mutable models.
         header = PngHeader.from_chunk(document.chunks[0])
@@ -140,8 +140,7 @@ class PngImage:
                     image.animation.frames.append(PngFrame(control, bitmap))
         before_data = True
         original = []
-        budget = ReadBudget(limits)
-        for chunk in document.chunks:
+        for chunk, typed in zip(document.chunks, metadata, strict=True):
             if chunk.type == b'PLTE':
                 image.palette = list(iter_unpack('BBB', chunk.data))
             elif chunk.type == b'tRNS':
@@ -153,7 +152,6 @@ class PngImage:
             elif chunk.type == b'IDAT':
                 before_data = False
             elif chunk.type not in (b'acTL', b'fcTL', b'fdAT') and not chunk.is_critical:
-                typed = parse_metadata(chunk, budget=budget)
                 if typed is not None:
                     if isinstance(typed, PngBackground) and typed.color is not None:
                         typed.color = tuple(sample & ((1 << header.bit_depth) - 1) for sample in typed.color)
@@ -185,16 +183,17 @@ class PngImage:
     def parse(stream: bytes | BinaryIO, *, limits: PngReadLimits | None = None) -> PngImage:
         ReadBudget(limits)  # Invalid application policy is not corrupt PNG input.
         try:
-            return PngImage._from_validated_document(PngDocument.parse(stream, limits=limits), limits=limits)
+            document, metadata = PngDocument._parse(stream, limits=limits)
+            return PngImage._from_validated_document(document, metadata)
         except PngValidationError as error:
             raise PngParseError(str(error)) from error
 
     @staticmethod
     def load(file_path: str | PathLike[str], *, limits: PngReadLimits | None = None) -> PngImage:
         """Read a whole PNG file, checking its boundary before decoding pixels."""
-        document = PngDocument.load(file_path, limits=limits)
+        document, metadata = PngDocument._load(file_path, limits=limits)
         try:
-            return PngImage._from_validated_document(document, limits=limits)
+            return PngImage._from_validated_document(document, metadata)
         except PngValidationError as error:
             raise PngParseError(str(error)) from error
 
@@ -454,7 +453,7 @@ class PngImage:
         """Validate the currently implemented pixel and animation model.
 
         Construction and field mutation allow incomplete intermediate state.
-        Chunk ordering, metadata semantics and compressed data are not checked.
+        Checks supported metadata relationships; compressed data is not retained.
         """
         self._validate(check_pixels=True)
 
@@ -490,8 +489,12 @@ class PngImage:
                 raise PngValidationError('palette alpha requires matching indexed palette entries')
             for alpha in self.palette_alpha:
                 check_integer('palette alpha', alpha, 0, 255)
-        metadata_chunks = [item.to_chunk() for item in self.metadata] + self.ancillary_chunks
-        validate_metadata_chunks(metadata_chunks, self.header, len(self.palette), for_encoding=True)
+        metadata = list(self.metadata)
+        for chunk in self.ancillary_chunks:
+            item = parse_metadata(chunk)
+            if item is not None:
+                metadata.append(item)
+        validate_metadata_models(metadata, self.header, len(self.palette), for_encoding=True)
         if check_pixels:
             self._validate_bitmap(self.bitmap, self.dimensions)
         if self.animation is not None:
@@ -500,7 +503,7 @@ class PngImage:
                 for frame in self.animation.frames:
                     self._validate_bitmap(frame.bitmap, frame.control.dimensions)
         if self.header.color_type == PngColorType.INDEXED_COLOR:
-            histograms = [PngHistogram.from_chunk(chunk) for chunk in metadata_chunks if chunk.type == b'hIST']
+            histograms = [item for item in metadata if item.type == b'hIST']
             if histograms:
                 frequencies = histograms[0].frequencies
                 bitmaps = [self.bitmap] + ([frame.bitmap for frame in self.animation.frames] if self.animation else [])

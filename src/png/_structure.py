@@ -10,7 +10,7 @@ from png.error import PngValidationError
 from png.format import PngColorType
 from png.header import PngHeader
 from png.limits import PngReadLimits
-from png.metadata import METADATA_TYPES, validate_metadata_chunks
+from png.metadata import METADATA_TYPES, PngMetadata, validate_metadata_chunks
 
 CRITICAL_TYPES = frozenset((b'IHDR', b'PLTE', b'IDAT', b'IEND'))
 # Only these chunks have semantic handling for critical edits at this stage.
@@ -143,7 +143,7 @@ def validate_structure(
     *,
     limits: PngReadLimits | None = None,
     check_profile_structure: bool = False,
-) -> None:
+) -> list[PngMetadata | None]:
     budget = ReadBudget(limits)
     budget.signature()
     if not chunks or chunks[0].type != b'IHDR':
@@ -158,6 +158,6 @@ def validate_structure(
         budget.chunk(chunk.length)
         budget.inspect(chunk.type, chunk.data)
     scan_animation(chunks, header)
-    validate_metadata_chunks(
+    return validate_metadata_chunks(
         chunks, header, structure.palette_size, budget=budget, check_profile_structure=check_profile_structure
     )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import zlib
+from collections.abc import Callable, Iterable
 from fractions import Fraction
 from struct import iter_unpack, pack, unpack
 from typing import TYPE_CHECKING
@@ -22,16 +23,22 @@ if TYPE_CHECKING:
     from png.header import PngHeader
 
 
-def _inflate(data: bytes, budget: ReadBudget) -> bytes:
+def _inflate(data: bytes, budget: ReadBudget, *, check_prefix: Callable[[bytes], None] | None = None) -> bytes:
     inflater = zlib.decompressobj()
     result = bytearray()
     pending = data
     try:
         while pending and not inflater.eof:
-            part = inflater.decompress(pending, budget.metadata_output_size())
+            size = budget.metadata_output_size()
+            if check_prefix is not None:
+                size = min(size, 128 - len(result))
+            part = inflater.decompress(pending, size)
             budget.metadata(len(part))
             result.extend(part)
             pending = inflater.unconsumed_tail
+            if check_prefix is not None and len(result) == 128:
+                check_prefix(bytes(result))
+                check_prefix = None
     except zlib.error as error:
         raise PngValidationError(f'invalid compressed metadata: {error}') from error
     if not inflater.eof or inflater.unused_data:
@@ -274,14 +281,20 @@ class PngIccProfile(PngMetadata):
         if not tail or tail[0] != 0:
             raise PngValidationError('iCCP requires compression method 0')
         budget.metadata(chunk.length - len(tail[1:]))
-        result = PngIccProfile(name, _inflate(tail[1:], budget))
+        result = PngIccProfile(
+            name, _inflate(tail[1:], budget, check_prefix=lambda prefix: PngIccProfile(name, prefix).validate())
+        )
         result.validate()
         return result
 
-    def to_chunk(self) -> PngChunk:
-        name = _keyword(self.name)
+    def validate(self) -> None:
+        _keyword(self.name)
         if self.color_space not in (b'RGB ', b'GRAY'):
             raise PngValidationError('PNG ICC profiles must describe RGB or grayscale data')
+
+    def to_chunk(self) -> PngChunk:
+        self.validate()
+        name = _keyword(self.name)
         return PngChunk(self.type, name + b'\0\0' + zlib.compress(self.profile))
 
 
@@ -301,6 +314,10 @@ class PngText(PngMetadata):
 
     def to_chunk(self) -> PngChunk:
         return PngChunk(self.type, _keyword(self.keyword) + b'\0' + _string(self.text, 'latin-1'))
+
+    def validate(self) -> None:
+        _keyword(self.keyword)
+        _string(self.text, 'latin-1')
 
 
 class PngCompressedText(PngText):
@@ -354,15 +371,26 @@ class PngInternationalText(PngMetadata):
             raise PngValidationError('iTXt is missing language or translated-keyword separators')
         language, translated, text = parts
         budget.metadata(chunk.length - len(text) if compressed else chunk.length)
+        language_tag = _decode(language, 'ascii')
+        validate_language_tag(language)
+        translated_keyword = _decode(translated, 'utf-8')
         result = PngInternationalText(
             keyword,
             _decode(_inflate(text, budget) if compressed else text, 'utf-8'),
-            _decode(language, 'ascii'),
-            _decode(translated, 'utf-8'),
+            language_tag,
+            translated_keyword,
             compressed,
         )
         result.validate()
         return result
+
+    def validate(self) -> None:
+        _keyword(self.keyword)
+        validate_language_tag(_string(self.language_tag, 'ascii'))
+        _string(self.translated_keyword, 'utf-8')
+        _string(self.text, 'utf-8')
+        if not isinstance(self.compressed, bool):
+            raise PngValidationError('iTXt compressed must be bool')
 
     def to_chunk(self) -> PngChunk:
         language = _string(self.language_tag, 'ascii')
@@ -665,30 +693,49 @@ def validate_metadata_chunks(
     for_encoding: bool = False,
     budget: ReadBudget | None = None,
     check_profile_structure: bool = False,
-) -> None:
+) -> list[PngMetadata | None]:
     if budget is None:
         budget = ReadBudget(None)
+    metadata = [parse_metadata(chunk, budget=budget) for chunk in chunks]
+    validate_metadata_models(
+        (item for item in metadata if item is not None),
+        header,
+        palette_size,
+        for_encoding=for_encoding,
+        check_profile_structure=check_profile_structure,
+    )
+    return metadata
+
+
+def validate_metadata_models(
+    metadata: Iterable[PngMetadata],
+    header: PngHeader | None = None,
+    palette_size: int = 0,
+    *,
+    for_encoding: bool = False,
+    check_profile_structure: bool = False,
+) -> None:
     parsed: dict[bytes, PngMetadata] = {}
     repeated = {b'tEXt', b'zTXt', b'iTXt', b'sPLT', b'gIFg', b'gIFx'}
     palette_names = set()
-    for chunk in chunks:
-        metadata = parse_metadata(chunk, budget=budget)
-        if metadata is not None:
-            if check_profile_structure:
-                if isinstance(metadata, PngIccProfile):
-                    validate_png_embedding(metadata.profile)
-                    metadata.validate_profile_tags()
-                elif isinstance(metadata, PngExif):
-                    metadata.validate_profile_tags()
-                elif isinstance(metadata, PngCicp):
-                    metadata.validate_code_points()
-            if chunk.type in parsed and chunk.type not in repeated:
-                raise PngValidationError(f'duplicate {chunk.type!r} metadata')
-            if isinstance(metadata, PngSuggestedPalette):
-                if metadata.name in palette_names:
-                    raise PngValidationError(f'duplicate sPLT palette name: {metadata.name!r}')
-                palette_names.add(metadata.name)
-            parsed[chunk.type] = metadata
+    for item in metadata:
+        item.validate()
+        kind = item.type
+        if check_profile_structure:
+            if isinstance(item, PngIccProfile):
+                validate_png_embedding(item.profile)
+                item.validate_profile_tags()
+            elif isinstance(item, PngExif):
+                item.validate_profile_tags()
+            elif isinstance(item, PngCicp):
+                item.validate_code_points()
+        if kind in parsed and kind not in repeated:
+            raise PngValidationError(f'duplicate {kind!r} metadata')
+        if isinstance(item, PngSuggestedPalette):
+            if item.name in palette_names:
+                raise PngValidationError(f'duplicate sPLT palette name: {item.name!r}')
+            palette_names.add(item.name)
+        parsed[kind] = item
     if b'mDCV' in parsed and b'cICP' not in parsed:
         raise PngValidationError('mDCV requires accompanying cICP metadata')
     if b'sRGB' in parsed:
