@@ -246,11 +246,18 @@ class PngImage:
             (chunk, chunk) for chunk in self.ancillary_chunks
         ]
         locations: dict[int, bool] = {}
-        copied_locations: dict[tuple[bytes, bytes], bool] = {}
+        copied_locations: dict[tuple[bytes, bytes], list[bool]] = {}
+        fallback_locations: dict[tuple[bytes, bytes], bool] = {}
         if self._source_ancillary is not None:
+            present = {id(entry) for entry, _chunk in entries}
             for original, kind, data, after_data in self._source_ancillary:
                 locations.setdefault(id(original), after_data)
-                copied_locations.setdefault((kind, data), after_data)
+                key = (kind, data)
+                fallback_locations.setdefault(key, after_data)
+                if id(original) not in present:
+                    copied_locations.setdefault(key, []).append(after_data)
+            for copies in copied_locations.values():
+                copies.reverse()
         for entry, chunk in entries:
             after_data = False
             if self._source_ancillary is not None:
@@ -261,7 +268,9 @@ class PngImage:
                     continue
                 location = locations.get(id(entry))
                 if location is None:
-                    location = copied_locations.get((chunk.type, chunk.data))
+                    key = (chunk.type, chunk.data)
+                    copies = copied_locations.get(key)
+                    location = copies.pop() if copies else fallback_locations.get(key)
                 if location is not None:
                     after_data = location
                 if chunk.type in _BEFORE_DATA:

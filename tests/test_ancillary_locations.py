@@ -42,3 +42,22 @@ def test_identical_repeated_metadata_remains_repeated_after_copy():
     image.metadata[0].text = 'edited'
     image = PngImage.parse(image.dump_to_bytes())
     assert [item.text for item in image.metadata] == ['edited'] + ['same'] * 99
+
+
+@pytest.mark.parametrize('copied_indices', [(0,), (1,), (0, 1)])
+def test_identical_unknown_chunks_keep_each_original_side_when_reconstructed(copied_indices):
+    source = PngImage(PngHeader((1, 1)), [[1, 2, 3, 255]]).to_document()
+    document = PngDocument(
+        [
+            source.chunks[0],
+            PngChunk(b'vpAg', b'same'),
+            *source.find_chunks(b'IDAT'),
+            PngChunk(b'vpAg', b'same'),
+            source.chunks[-1],
+        ]
+    )
+    image = PngImage.parse(document.dump_to_bytes())
+    for index in copied_indices:
+        image.ancillary_chunks[index] = deepcopy(image.ancillary_chunks[index])
+    output = image.to_document().chunks
+    assert [chunk.type for chunk in output] == [b'IHDR', b'vpAg', b'IDAT', b'vpAg', b'IEND']
