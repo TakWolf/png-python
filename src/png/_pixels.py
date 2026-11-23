@@ -3,6 +3,7 @@
 import sys
 import zlib
 from array import array
+from collections import deque
 from collections.abc import Iterable, Iterator
 from struct import iter_unpack, pack
 
@@ -20,17 +21,20 @@ def _passes(header: PngHeader) -> Iterator[tuple[int, int, int, int, int, int]]:
     return scan_passes(header.width, header.height, header.interlace_method)
 
 
-def _inflate(blocks: Iterable[bytes], expected_size: int) -> bytes:
+def _inflate_parts(blocks: Iterable[bytes | memoryview], expected_size: int) -> Iterator[bytes]:
     inflater = zlib.decompressobj()
-    data = bytearray()
+    total = 0
     try:
         for block in blocks:
             pending = block
             while pending and not inflater.eof:
-                data.extend(inflater.decompress(pending, min(65536, expected_size - len(data) + 1)))
-                if len(data) > expected_size:
+                part = inflater.decompress(pending, min(65536, expected_size - total + 1))
+                total += len(part)
+                if total > expected_size:
                     raise PngParseError('image data contains more scanline bytes than expected')
                 pending = inflater.unconsumed_tail
+                if part:
+                    yield part
             if inflater.eof:
                 # PNG permits unused bytes after the final zlib stream. The
                 # envelope parser has already checked the CRC of every IDAT.
@@ -39,9 +43,31 @@ def _inflate(blocks: Iterable[bytes], expected_size: int) -> bytes:
         raise PngParseError(f'invalid zlib image data: {error}') from error
     if not inflater.eof:
         raise PngParseError('incomplete zlib image data')
-    if len(data) != expected_size:
-        raise PngParseError(f'expected {expected_size} scanline bytes, got {len(data)}')
-    return bytes(data)
+    if total != expected_size:
+        raise PngParseError(f'expected {expected_size} scanline bytes, got {total}')
+
+
+class _ScanlineReader:
+    def __init__(self, parts: Iterator[bytes]) -> None:
+        self.parts = parts
+        self.pending = memoryview(b'')
+
+    def read(self, size: int) -> bytes:
+        data = bytearray()
+        while len(data) < size:
+            if not self.pending:
+                try:
+                    self.pending = memoryview(next(self.parts))
+                except StopIteration as error:
+                    raise PngParseError('incomplete scanline data') from error
+            count = min(size - len(data), len(self.pending))
+            data.extend(self.pending[:count])
+            self.pending = self.pending[count:]
+        return bytes(data)
+
+    def finish(self) -> None:
+        for _part in self.parts:
+            pass
 
 
 # Keep Paeth prediction inline in the three byte loops below. The distances
@@ -190,25 +216,31 @@ def _empty_row(count: int, depth: int, compact: bool) -> PngRow:
     return bytearray(count)
 
 
-def decode_pixels(header: PngHeader, blocks: Iterable[bytes], *, compact: bool = False) -> PngBitmap:
+def decode_pixels(header: PngHeader, blocks: Iterable[bytes | memoryview], *, compact: bool = False) -> PngBitmap:
     passes = list(_passes(header))
     channels = header.channels
     expected_size = sum(((width * header.bits_per_pixel + 7) // 8 + 1) * height for _, _, _, _, width, height in passes)
     # Validate the decompressed extent before allocating the bitmap from IHDR.
-    data = _inflate(blocks, expected_size)
+    encoded = tuple(blocks)
+    parts = _inflate_parts(encoded, expected_size)
+    if expected_size <= 65536:
+        parts = iter(tuple(parts))
+    else:
+        deque(parts, maxlen=0)
+        parts = _inflate_parts(encoded, expected_size)
+    reader = _ScanlineReader(parts)
     bitmap = (
         []
         if header.interlace_method == PngInterlaceMethod.NONE
         else [_empty_row(header.width * channels, header.bit_depth, compact) for _row in range(header.height)]
     )
     stride = max(1, (header.bits_per_pixel + 7) // 8)
-    offset = 0
     for x, y, dx, dy, width, height in passes:
         row_size = (width * header.bits_per_pixel + 7) // 8
         previous = bytes(row_size)
         for row_index in range(height):
-            row = _unfilter(data[offset], data[offset + 1 : offset + row_size + 1], previous, stride)
-            offset += row_size + 1
+            scanline = reader.read(row_size + 1)
+            row = _unfilter(scanline[0], scanline[1:], previous, stride)
             previous = row
             samples = _unpack_samples(row, header.bit_depth, width * channels, compact=compact)
             if header.interlace_method == PngInterlaceMethod.NONE:
@@ -218,6 +250,7 @@ def decode_pixels(header: PngHeader, blocks: Iterable[bytes], *, compact: bool =
             for index in range(width):
                 start = (x + index * dx) * channels
                 target[start : start + channels] = samples[index * channels : (index + 1) * channels]
+    reader.finish()
     return bitmap
 
 
@@ -228,6 +261,49 @@ def encode_pixels(
     compression_level: int,
     compression_strategy: PngCompressionStrategy = PngCompressionStrategy.DEFAULT,
 ) -> bytes:
+    return b''.join(encode_pixel_blocks(header, bitmap, filter_type, compression_level, compression_strategy))
+
+
+def encode_pixel_blocks(
+    header: PngHeader,
+    bitmap: PngBitmap,
+    filter_type: PngFilterType | None,
+    compression_level: int,
+    compression_strategy: PngCompressionStrategy = PngCompressionStrategy.DEFAULT,
+    *,
+    block_size: int = 65536,
+) -> Iterator[bytes]:
+    check_integer('IDAT chunk size', block_size, 1, 0x7FFFFFFF)
+    parts = _encode_parts(header, bitmap, filter_type, compression_level, compression_strategy)
+    return _split_blocks(parts, block_size)
+
+
+def _split_blocks(parts: Iterable[bytes], size: int) -> Iterator[bytes]:
+    buffer = bytearray()
+    for part in parts:
+        offset = 0
+        if buffer:
+            count = min(size - len(buffer), len(part))
+            buffer.extend(part[:count])
+            offset = count
+            if len(buffer) == size:
+                yield bytes(buffer)
+                buffer.clear()
+        while len(part) - offset >= size:
+            yield part[offset : offset + size]
+            offset += size
+        buffer.extend(part[offset:])
+    if buffer:
+        yield bytes(buffer)
+
+
+def _encode_parts(
+    header: PngHeader,
+    bitmap: PngBitmap,
+    filter_type: PngFilterType | None,
+    compression_level: int,
+    compression_strategy: PngCompressionStrategy,
+) -> Iterator[bytes]:
     check_integer('compression level', compression_level, -1, 9)
     check_integer('compression strategy', compression_strategy, 0, 4)
     if filter_type is not None:
@@ -236,7 +312,6 @@ def encode_pixels(
     if filter_type is None and not adaptive:
         filter_type = PngFilterType.NONE
     compressor = zlib.compressobj(compression_level, strategy=compression_strategy)
-    data = bytearray()
     channels = header.channels
     stride = max(1, (header.bits_per_pixel + 7) // 8)
     for x, y, dx, dy, width, height in _passes(header):
@@ -274,7 +349,8 @@ def encode_pixels(
                         kind, filtered = option, best
             else:
                 filtered = _filter(kind, row, previous, stride)
-            data.extend(compressor.compress(bytes([kind]) + filtered))
+            part = compressor.compress(bytes([kind]) + filtered)
+            if part:
+                yield part
             previous = row
-    data.extend(compressor.flush())
-    return bytes(data)
+    yield compressor.flush()

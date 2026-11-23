@@ -8,7 +8,7 @@ from typing import BinaryIO
 
 from png._apng import frame_header, scan_animation
 from png._limits import ReadBudget
-from png._pixels import decode_pixels, encode_pixels
+from png._pixels import decode_pixels, encode_pixel_blocks
 from png._structure import _BEFORE_DATA, _BEFORE_PALETTE, validate_structure
 from png._validation import check_boolean, check_integer
 from png.animation import PngAnimation, PngFrame, PngRenderedFrame
@@ -141,7 +141,9 @@ class PngImage:
                     image.animation.default_image_control = control
                 else:
                     bitmap = decode_pixels(
-                        frame_header(header, control.dimensions), (chunk.data[4:] for chunk in blocks), compact=compact
+                        frame_header(header, control.dimensions),
+                        (memoryview(chunk.data)[4:] for chunk in blocks),
+                        compact=compact,
                     )
                     image.animation.frames.append(PngFrame(control, bitmap))
         before_data = True
@@ -239,7 +241,6 @@ class PngImage:
         # Publicly returned documents remain mutable and are rechecked on output.
         self.validate()
         check_integer('IDAT chunk size', idat_chunk_size, 1, 0x7FFFFFFF)
-        encoded = encode_pixels(self.header, self.bitmap, filter_type, compression_level, compression_strategy)
         before, after = [], []
         entries = [(item, item.to_chunk()) for item in self.metadata] + [
             (chunk, chunk) for chunk in self.ancillary_chunks
@@ -282,24 +283,32 @@ class PngImage:
                 chunks.append(self.animation.default_image_control.to_chunk(sequence))
                 sequence += 1
         chunks.extend(
-            PngChunk(b'IDAT', encoded[offset : offset + idat_chunk_size])
-            for offset in range(0, len(encoded), idat_chunk_size)
+            PngChunk(b'IDAT', block)
+            for block in encode_pixel_blocks(
+                self.header,
+                self.bitmap,
+                filter_type,
+                compression_level,
+                compression_strategy,
+                block_size=idat_chunk_size,
+            )
         )
         if self.animation is not None:
             for frame in self.animation.frames:
                 chunks.append(frame.control.to_chunk(sequence))
                 sequence += 1
-                payload = encode_pixels(
+                frame_chunk_size = min(idat_chunk_size, 0x7FFFFFFF - 4)
+                payload = encode_pixel_blocks(
                     frame_header(self.header, frame.control.dimensions),
                     frame.bitmap,
                     filter_type,
                     compression_level,
                     compression_strategy,
+                    block_size=frame_chunk_size,
                 )
-                frame_chunk_size = min(idat_chunk_size, 0x7FFFFFFF - 4)
-                for offset in range(0, len(payload), frame_chunk_size):
+                for block in payload:
                     check_integer('sequence number', sequence, 0, 0x7FFFFFFF)
-                    chunks.append(PngChunk(b'fdAT', pack('>I', sequence) + payload[offset : offset + frame_chunk_size]))
+                    chunks.append(PngChunk(b'fdAT', pack('>I', sequence) + block))
                     sequence += 1
         chunks.extend(after)
         chunks.append(PngChunk(b'IEND'))
