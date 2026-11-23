@@ -236,6 +236,12 @@ class PngImage:
         entries = [(item, item.to_chunk()) for item in self.metadata] + [
             (chunk, chunk) for chunk in self.ancillary_chunks
         ]
+        locations: dict[int, bool] = {}
+        copied_locations: dict[tuple[bytes, bytes], bool] = {}
+        if self._source_ancillary is not None:
+            for original, kind, data, after_data in self._source_ancillary:
+                locations.setdefault(id(original), after_data)
+                copied_locations.setdefault((kind, data), after_data)
         for entry, chunk in entries:
             after_data = False
             if self._source_ancillary is not None:
@@ -244,11 +250,11 @@ class PngImage:
                 # policy as PngDocument and omit unknown unsafe chunks.
                 if chunk.type not in METADATA_TYPES and not chunk.safe_to_copy:
                     continue
-                origins = [origin for origin in self._source_ancillary if origin[0] is entry]
-                if not origins:
-                    origins = [origin for origin in self._source_ancillary if origin[1:3] == (chunk.type, chunk.data)]
-                if origins:
-                    after_data = origins[0][3]
+                location = locations.get(id(entry))
+                if location is None:
+                    location = copied_locations.get((chunk.type, chunk.data))
+                if location is not None:
+                    after_data = location
                 if chunk.type in _BEFORE_DATA:
                     after_data = False
             (after if after_data else before).append(PngChunk(chunk.type, chunk.data))
