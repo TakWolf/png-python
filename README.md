@@ -386,6 +386,8 @@ limits = PngReadLimits(
     max_total_pixels=16_000_000,
     max_frames=100,
     max_metadata_bytes=4 * 1024 * 1024,
+    max_row_bytes=1024 * 1024,
+    max_decoded_bytes=128 * 1024 * 1024,
 )
 try:
     image = PngImage.load('created.png', limits=limits)
@@ -400,6 +402,11 @@ except PngError as error:
 still be valid. Omitting `limits` adds no application caps. These limits count
 data sizes, not total Python memory usage. Invalid edited models raise
 `PngValidationError`; unsupported profile features raise `PngUnsupportedError`.
+
+`max_row_bytes` limits packed sample bytes in each actual scanline/pass,
+excluding its filter byte. `max_decoded_bytes` limits total decompressed scanline
+bytes, including filter bytes, across the default image and additional APNG
+frames. Both are checked from dimensions before pixel decompression.
 
 ## Format and validation details
 

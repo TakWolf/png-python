@@ -4,6 +4,7 @@ import zlib
 from collections.abc import Iterable, Iterator
 from struct import iter_unpack, pack
 
+from png._scanlines import scan_passes
 from png._validation import check_integer
 from png.error import PngParseError
 from png.format import PngColorType, PngCompressionStrategy, PngFilterType, PngInterlaceMethod
@@ -11,16 +12,9 @@ from png.header import PngHeader
 
 _FILTER_COST = bytes(value if value < 128 else 256 - value for value in range(256))
 
-_ADAM7 = ((0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2))
-
 
 def _passes(header: PngHeader) -> Iterator[tuple[int, int, int, int, int, int]]:
-    passes = _ADAM7 if header.interlace_method == PngInterlaceMethod.ADAM7 else ((0, 0, 1, 1),)
-    for x, y, dx, dy in passes:
-        width = max(0, (header.width - x + dx - 1) // dx)
-        height = max(0, (header.height - y + dy - 1) // dy)
-        if width and height:
-            yield x, y, dx, dy, width, height
+    return scan_passes(header.width, header.height, header.interlace_method)
 
 
 def _inflate(blocks: Iterable[bytes], expected_size: int) -> bytes:

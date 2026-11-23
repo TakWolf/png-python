@@ -32,6 +32,8 @@ _LIMITS = (
     'max_total_pixels',
     'max_frames',
     'max_metadata_bytes',
+    'max_row_bytes',
+    'max_decoded_bytes',
 )
 
 

@@ -8,6 +8,9 @@ class PngReadLimits:
 
     Byte counts describe the PNG data, not Python's resident memory usage.
     The policy is reusable; counters belong to each read operation.
+    max_row_bytes excludes the filter byte and counts actual nonempty passes.
+    max_decoded_bytes includes filter bytes and accumulates the default image
+    and every additional animation frame exactly once.
     """
 
     max_chunk_bytes: int | None
@@ -17,6 +20,8 @@ class PngReadLimits:
     max_total_pixels: int | None
     max_frames: int | None
     max_metadata_bytes: int | None
+    max_row_bytes: int | None
+    max_decoded_bytes: int | None
 
     def __init__(
         self,
@@ -28,6 +33,8 @@ class PngReadLimits:
         max_total_pixels: int | None = None,
         max_frames: int | None = None,
         max_metadata_bytes: int | None = None,
+        max_row_bytes: int | None = None,
+        max_decoded_bytes: int | None = None,
     ) -> None:
         self.max_chunk_bytes = max_chunk_bytes
         self.max_total_bytes = max_total_bytes
@@ -36,6 +43,8 @@ class PngReadLimits:
         self.max_total_pixels = max_total_pixels
         self.max_frames = max_frames
         self.max_metadata_bytes = max_metadata_bytes
+        self.max_row_bytes = max_row_bytes
+        self.max_decoded_bytes = max_decoded_bytes
 
     def validate(self) -> None:
         for name in (
@@ -46,6 +55,8 @@ class PngReadLimits:
             'max_total_pixels',
             'max_frames',
             'max_metadata_bytes',
+            'max_row_bytes',
+            'max_decoded_bytes',
         ):
             value = getattr(self, name)
             if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 0):
