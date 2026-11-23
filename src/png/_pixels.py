@@ -223,6 +223,8 @@ def encode_pixels(
             # Keep the best candidate and a scratch row; swap rather than copy.
             best = bytearray(row_size)
             trial = bytearray(row_size)
+            first_options = (3,) if width == 1 else (1, 3)
+            later_options = (2, 3) if width == 1 else (1, 2, 3, 4)
         for row_index in range(height):
             source = bitmap[y + row_index * dy]
             samples = (
@@ -239,10 +241,10 @@ def encode_pixels(
             if adaptive:
                 kind, filtered = 0, row
                 minimum = sum(row.translate(_FILTER_COST))
-                for option in range(1, 5):
+                for option in first_options if row_index == 0 else later_options:
                     if minimum == 0:
                         break
-                    score = _filter_and_score(option, row, previous, stride, trial, minimum)
+                    score = _filter_and_score(option, row, previous, stride, trial, minimum - 1)
                     if score < minimum:
                         minimum = score
                         best, trial = trial, best
