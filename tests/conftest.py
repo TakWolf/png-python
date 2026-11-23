@@ -10,6 +10,7 @@ _PNG_SUITE_DIR = _ASSETS_DIR.joinpath('pngsuite')
 _WPT_DIR = _ASSETS_DIR.joinpath('wpt')
 _WPT_PNG_DIR = _WPT_DIR.joinpath('png', 'support')
 _APNG_DIR = _WPT_DIR.joinpath('png', 'apng')
+_LIBPNG_DIR = _ASSETS_DIR.joinpath('libpng')
 
 
 @pytest.fixture(scope='session')
@@ -40,6 +41,31 @@ def wpt_png_dir() -> Path:
 @pytest.fixture(scope='session')
 def apng_dir() -> Path:
     return _APNG_DIR
+
+
+@pytest.fixture(scope='session')
+def libpng_dir() -> Path:
+    return _LIBPNG_DIR
+
+
+@pytest.fixture(params=sorted(path.name for path in _LIBPNG_DIR.glob('*.png') if not path.name.startswith('ch')))
+def libpng_sample_file(libpng_dir: Path, request) -> Path:
+    return libpng_dir.joinpath(request.param)
+
+
+@pytest.fixture(params=sorted(path.name for path in _LIBPNG_DIR.glob('ch*.png')))
+def libpng_histogram_file(libpng_dir: Path, request) -> Path:
+    return libpng_dir.joinpath(request.param)
+
+
+@pytest.fixture(params=sorted(path.name for path in _LIBPNG_DIR.joinpath('badpal').glob('*.png')))
+def libpng_palette_file(libpng_dir: Path, request) -> Path:
+    return libpng_dir.joinpath('badpal', request.param)
+
+
+@pytest.fixture(params=sorted(path.name for path in _LIBPNG_DIR.joinpath('crashers').glob('*.png')))
+def libpng_crasher_file(libpng_dir: Path, request) -> Path:
+    return libpng_dir.joinpath('crashers', request.param)
 
 
 @pytest.fixture(params=sorted(path.name for path in _PNG_SUITE_DIR.glob('*.png') if not path.name.startswith('x')))

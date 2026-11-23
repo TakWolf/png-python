@@ -507,18 +507,12 @@ creator registration is advisory. See the
 
 ## Development
 
-Tests use the original [PngSuite](assets/pngsuite/SOURCE.md) images and pinned
-[WPT APNG fixtures and reference images](assets/wpt/README.md). From a checkout:
-
 ```shell
 uv sync
 uv run -m ruff check --fix
 uv run -m ruff format
 uv run -m pytest
 ```
-
-Passing the fixture suites is not a claim of complete
-Third Edition or external profile certification.
 
 ## References
 

@@ -18,6 +18,7 @@ from png import (
     PngLimitError,
     PngParseError,
     PngReadLimits,
+    PngText,
     PngValidationError,
 )
 from png._limits import ReadBudget
@@ -104,3 +105,28 @@ def test_mutated_document_is_revalidated():
         PngImage.from_document(document)
     with pytest.raises(PngParseError):
         PngImage.parse(b'\x89PNG\r\n\x1a\n' + b''.join(chunk.dump_to_bytes() for chunk in document.chunks))
+
+
+@pytest.mark.parametrize('kind', ['tEXt', 'zTXt', 'iTXt', 'compressed_iTXt'])
+def test_appending_getter_results_preserves_repeated_text_and_aliases(kind):
+    constructors = {
+        'tEXt': PngText,
+        'zTXt': PngCompressedText,
+        'iTXt': PngInternationalText,
+        'compressed_iTXt': lambda key, value: PngInternationalText(key, value, compressed=True),
+    }
+    keys = ['Title', 'Author', 'Desc', 'Copyright', 'Source', 'Comment']
+    metadata = [constructors[kind](key, f't{index}') for index, key in enumerate(keys)]
+    image = PngImage(PngHeader((1, 1)), [[1, 2, 3, 255]], metadata=metadata)
+    selected = image.find_metadata(metadata[0].type)
+    image.metadata.extend(selected)
+    selected.clear()
+    assert len(image.metadata) == 12
+    assert image.metadata[0] is image.metadata[6]
+    image.metadata[0].text = 'updated through the shared object'
+    expected = [('Title', 'updated through the shared object')] + [
+        (key, f't{index}') for index, key in enumerate(keys[1:], 1)
+    ]
+    restored = PngImage.parse(image.dump_to_bytes())
+    assert [(item.keyword, item.text) for item in restored.metadata] == expected * 2
+    assert restored.metadata[0] is not restored.metadata[6]
